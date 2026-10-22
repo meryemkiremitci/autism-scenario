@@ -48,15 +48,15 @@ DUGUM_NIYETLERI: dict[str, dict[str, str]] = {
     },
     "boyut": {
         "alternatif_sor": "Müşteri ürünün başka bir boyutunu soruyor",
-        "ayril": "Müşteri teşekkür edip ürünü almadan ayrılmak istiyor",
+        "ayril": "Müşteri teşekkür edip ya da sadece vedalaşıp (ör. 'tamam', 'iyi günler', 'hoşça kal') ürünü almadan ayrılmak istiyor",
     },
     "gelis": {
         "gelis_sor": "Müşteri ürünün ne zaman geleceğini soruyor",
-        "ayril": "Müşteri teşekkür edip ürünü almadan ayrılmak istiyor",
+        "ayril": "Müşteri teşekkür edip ya da sadece vedalaşıp (ör. 'tamam', 'iyi günler', 'hoşça kal') ürünü almadan ayrılmak istiyor",
     },
     "tesekkur": {
         "tesekkur": "Müşteri yardım için teşekkür ediyor",
-        "ayril": "Müşteri teşekkür etmeden kısaca konuşmayı bitiriyor (ör. 'tamam')",
+        "ayril": "Müşteri teşekkür etmeden kısaca konuşmayı bitiriyor (ör. 'tamam', 'iyi günler')",
         "urun_sor": "Müşteri ürünün yerini tekrar soruyor",
     },
     "onay": {
@@ -219,8 +219,10 @@ def isle(
         return s
 
     # --- Orta güven: görevli rol içinde netleştirir -----------------------
-    if guven == "orta" and tahmin:
-        asil = next((n for n in niyetler if n not in GENEL_NIYETLER), "urun_sor")
+    # Sadece ürün sorularında anlamlı ("Süt mü arıyorsunuz?"). "İyi günler" gibi
+    # veda ya da teşekkür cümlelerinde sorulursa saçma olur; onlar normal işlenir.
+    asil = next((n for n in niyetler if n not in GENEL_NIYETLER), "urun_sor")
+    if guven == "orta" and tahmin and asil == "urun_sor":
         donus = d.dugum if d.dugum != "onay" else (d.bekleyen.donus_dugumu if d.bekleyen else "urun")
         d.bekleyen = BekleyenNiyet(niyet=asil, donus_dugumu=donus, varliklar=varliklar)
         d.dugum = "onay"
