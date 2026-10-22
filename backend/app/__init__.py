@@ -1,0 +1,1 @@
+"""Mağaza senaryosu backend paketi."""

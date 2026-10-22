@@ -1,0 +1,2511 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mağazada yardım isteme provası</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ========== SAYFA DÜZENİ VE ARAYÜZ ========== */
+  :root {
+    --arkaplan: #e9efee;  --yuzey: #ffffff;  --metin: #23302e;  --soluk: #6b7c78;  --vurgu: #2f6f73;
+    --kazak: #c9973f;  --kazak-koyu: #a87a2c;  --kot: #4a6185;  --kot-koyu: #3a4e6e;
+    --sac-m: #2e2420;  --sac-m-acik: #4a3a33;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark;
+      --arkaplan: #1b2423;  --yuzey: #26312f;  --metin: #e6eeec;  --soluk: #9fb0ac;  --vurgu: #7cc0c4; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; padding: 16px;
+    display: flex; justify-content: center;
+    background: var(--arkaplan); color: var(--metin);
+    font-family: "Nunito", "Segoe UI", system-ui, sans-serif;
+  }
+  .sayfa { width: min(1100px, 100%); display: flex; flex-direction: column; gap: 12px; align-items: center; }
+  .cerceve { width: 100%; overflow: hidden; border-radius: 16px; position: relative; }
+  #sahne { display: block; width: 100%; height: auto; }
+  #sahne text { font-family: "Nunito", "Segoe UI", system-ui, sans-serif; }
+
+  .ust-satir { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: center; align-items: center; font-size: .9rem; }
+  .ust-satir b { font-weight: 700; }
+
+  /* Rehber: sahnenin sağ üst köşesinde, yüzey renginde yumuşak bir kart (altyazı altta) */
+  .rehber {
+    position: absolute; right: 12px; top: 12px;
+    width: max-content; max-width: min(360px, calc(100% - 24px));
+    padding: 10px 16px; border-radius: 14px; border-left: 4px solid var(--vurgu);
+    background: color-mix(in srgb, var(--yuzey) 92%, transparent);
+    box-shadow: 0 2px 10px rgba(16, 22, 26, .18); pointer-events: none;
+  }
+  .rehber:has(.adim:empty) { display: none; }
+  .adim { margin: 0; font-weight: 700; color: var(--vurgu); font-size: 1rem; line-height: 1.4; }
+  /* İpucu ("Sen: …", "Dinliyorum…") sahnenin dışında, altta kalır */
+  .ipucu { margin: 0; color: var(--soluk); font-size: .95rem; text-align: center; min-height: 1.4em; }
+  .altyazi {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    max-width: 80%; padding: 8px 14px; border-radius: 10px;
+    background: rgba(20, 28, 27, .78); color: #fff; font-size: 1.05rem; line-height: 1.45;
+    display: none;
+  }
+  .altyazi.gorunur { display: block; }
+  .altyazi:empty { display: none; }
+
+  .panel { width: min(640px, 100%); display: none; flex-direction: column; gap: 10px; }
+  .panel.acik { display: flex; }
+  .cipler { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .cip {
+    padding: 8px 14px; border-radius: 999px; border: 1px solid var(--vurgu);
+    background: var(--yuzey); color: var(--metin); font: inherit; font-size: .95rem; cursor: pointer;
+  }
+  .cip.onarim { border-style: dashed; border-color: var(--soluk); font-size: .85rem; padding: 6px 12px; }
+  .giris { display: flex; gap: 8px; }
+  .giris input {
+    flex: 1; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--soluk);
+    background: var(--yuzey); color: var(--metin); font: inherit;
+  }
+  .ana-buton {
+    padding: 10px 18px; border: 0; border-radius: 10px; cursor: pointer;
+    background: var(--vurgu); color: var(--yuzey); font: inherit; font-weight: 700;
+  }
+  .ana-buton[hidden] { display: none; }
+  button:disabled { opacity: .5; cursor: default; }
+  :focus-visible { outline: 3px solid var(--vurgu); outline-offset: 2px; }
+
+  /* ========== KAMERA: dünya grubu ve perde ========== */
+  /* "Kamera" aslında hareket etmiyor: çekimler arasında perde kapanırken dünya yeni ölçeğe alınıyor */
+  .dunya { transform-origin: 0 0; }
+  .perde { fill: #10161a; opacity: 1; transition: opacity .6s ease; pointer-events: none; }
+  .perde.acik { opacity: 0; }
+  .reyon { cursor: default; }
+  /* Yakın çekimde görevli, özel bir jest yapmıyorsa müşteriye (sağa) bakar */
+  .yakin .karakter:not([data-jest="isaret"]):not([data-durum="dusunuyor"]) .bakis { transform: translate(1.6px, .3px); }
+
+  /* ========== MÜŞTERİ (kullanıcının avatarı, arkadan) ========== */
+  .musteri-konum { transform-origin: 0 0; }
+  .musteri-konum.yuru { transition: transform var(--yurume-suresi, 2.6s) cubic-bezier(.4, 0, .4, 1); }
+  .kazak { fill: var(--kazak); }
+  .ribana { fill: var(--kazak-koyu); }
+  .yaka-arka { fill: var(--kazak-koyu); }
+  .kol-kazak { stroke: var(--kazak); stroke-linecap: round; }
+  .manset { stroke: var(--kazak-koyu); stroke-linecap: butt; }
+  .kot { fill: var(--kot); }
+  .ayakkabi-arka { fill: #f1eee7; }
+  .taban-arka { fill: #c9c3b6; }
+  .sac-m { fill: var(--sac-m); }
+  .tel-m { fill: none; stroke: var(--sac-m-acik); stroke-width: 1.6; stroke-linecap: round; opacity: .8; }
+
+  /* Yürüme: bacaklar sırayla kalkar, kollar hafif sallanır, gövde aşağı yukarı iner */
+  .bacak.sol { transform-origin: 104px 250px; }
+  .bacak.sag { transform-origin: 136px 250px; }
+  .yuruyor .bacak.sol { animation: adim .7s ease-in-out infinite; }
+  .yuruyor .bacak.sag { animation: adim .7s ease-in-out infinite -.35s; }
+  .yuruyor .kol.sol   { animation: kol-salla .7s ease-in-out infinite; }
+  .yuruyor .kol.sag   { animation: kol-salla .7s ease-in-out infinite -.35s; }
+  .yuruyor .ust-govde { animation: zipla-yuru .35s ease-in-out infinite; }
+  @keyframes adim {
+    0%, 100% { transform: translateY(0) scaleY(1); }
+    25%      { transform: translateY(-7px) scaleY(.96); }
+    50%      { transform: translateY(0) scaleY(1); }
+  }
+  @keyframes kol-salla {
+    0%, 100% { transform: rotate(-5deg); }
+    50%      { transform: rotate(5deg); }
+  }
+  @keyframes zipla-yuru {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-3px); }
+  }
+
+  /* ========== GÖREVLİNİN DÖNMESİ ========== */
+  /* Arkadan ve önden çizim üst üste duruyor; dönerken kap yatayda daralıp tekrar açılıyor,
+     tam ortada arka çizim gizlenip ön çizim gösteriliyor. */
+  .gorevli-kap { transition: transform .22s ease-in-out; }
+  .gorevli-kap.don { transform: scaleX(.5); }
+  .gorevli-kap.arkasi-donuk #gorevli,
+  .gorevli-kap:not(.arkasi-donuk) #gorevliArka { visibility: hidden; }
+  .fiyonk { fill: var(--onluk); }
+
+  /* Raf düzenleme: sağ kol rafa uzanıp geri iner */
+  .karakter-arka.duzenliyor .kol.sag   { animation: raf-kol 3.4s ease-in-out infinite; }
+  .karakter-arka.duzenliyor .onkol.sag { animation: raf-onkol 3.4s ease-in-out infinite; }
+  @keyframes raf-kol   { 0%, 100% { transform: rotate(0); } 30%, 70% { transform: rotate(-150deg); } 50% { transform: rotate(-140deg); } }
+  @keyframes raf-onkol { 0%, 100% { transform: rotate(0); } 30%, 70% { transform: rotate(-25deg); } 50% { transform: rotate(-10deg); } }
+
+  /* ========== DİĞER MÜŞTERİLER ========== */
+  #sahne:not(.kalabalik-acik) .kalabalik { display: none; }
+  .bisiklet-yaka { fill: none; stroke: var(--gomlek-koyu); stroke-width: 2.5; stroke-linecap: round; }
+  .sepet-k { fill: #c4575a; stroke: #9d3f43; stroke-width: 1.5; }
+  .sepet-ag-k { fill: none; stroke: #9d3f43; stroke-width: 1.2; }
+  .sepet-sap-k { fill: none; stroke: #3a352e; stroke-width: 2.4; stroke-linecap: round; }
+  .kutu { fill: #e3c27f; stroke: #b9964f; stroke-width: 1; }  .kutu-etiket { fill: #fff; }
+  /* Detaylı seviyede ortak gradyanlar herkesi aynı renge boyardı; müşteriler kendi renklerini kullansın */
+  [data-seviye="3"] .npc .yuz { fill: var(--ten); }
+  [data-seviye="3"] .npc .gomlek { fill: var(--gomlek); }
+  [data-seviye="3"] .npc .pantolon { fill: var(--pantolon); }
+  [data-seviye="3"] .npc .sac { fill: var(--sac); }
+  [data-seviye="3"] .npc .sac-k { fill: var(--sac-k); }
+  /* Ürün okuyan müşteri: sağ eli göğüs hizasında, gözleri aşağıda */
+  #npc1 .kol.sag   { transform: rotate(18deg); }
+  #npc1 .onkol.sag { transform: rotate(120deg); }
+  #npc1 .el.sag    { transform: rotate(-30deg); }
+  #npc1 .bakis     { transform: translate(-.6px, 1.6px); }
+  .npc[data-kirp="1"] .goz { transform: scaleY(.08); }
+
+  /* ========== SAĞA İŞARET ========== */
+  .karakter[data-jest="isaret-sag"] .kol.sag   { transform: rotate(-55deg); }
+  .karakter[data-jest="isaret-sag"] .onkol.sag { transform: rotate(-10deg); }
+  .karakter[data-jest="isaret-sag"] .parmak-sag { opacity: 1; }
+  .karakter:not([data-jest="isaret-sag"]) .parmak-sag { opacity: 0 !important; }
+  .karakter[data-jest="isaret-sag"] .kafa  { transform: rotate(4deg); }
+  .karakter[data-jest="isaret-sag"] .bakis { transform: translate(2px, .5px); }
+
+  /* ========== BAŞKA MÜŞTERİYLE SOHBET ========== */
+  #sahne:not(.mod-konusma) #sohbetKap { display: none; }
+  .sohbet-kap { transition: transform 2.6s cubic-bezier(.4, 0, .4, 1), opacity 1s ease 1.8s; }
+  .sohbet-kap.gitti { transform: translate(-330px, -46px); opacity: 0; }
+  .sohbet-kap:not(.gitti) .kafa { animation: onay 2.4s ease-in-out infinite; }
+  .gorevli-kap.sohbette #gorevli .bakis { transform: translate(-2.2px, .3px); }
+
+  /* ========== ÜRÜN VURGUSU ========== */
+  .urun-vurgu { fill: #f2b544; fill-opacity: .12; stroke: #f2b544; stroke-width: 4; opacity: 0; }
+  .urun-vurgu.gorunur { opacity: 1; animation: nabiz 1.6s ease-in-out infinite; }
+  @keyframes nabiz { 0%, 100% { stroke-opacity: 1; } 50% { stroke-opacity: .35; } }
+
+  /* ========== ÜRÜN SEÇME VE BİTİŞ EKRANLARI ========== */
+  .kaplama {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    padding: 16px; background: rgba(16, 22, 26, .55);
+  }
+  .kaplama.acik { display: flex; }
+  .kutu-panel {
+    width: min(620px, 100%); max-height: 100%; overflow: auto;
+    background: var(--yuzey); color: var(--metin); border-radius: 18px; padding: 18px 20px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .kutu-panel[hidden] { display: none; }
+  .kutu-panel h2 { margin: 0; font-size: 1.2rem; }
+  .kutu-panel p { margin: 0; line-height: 1.5; }
+  .urun-kartlari { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .urun-karti {
+    display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px;
+    border: 2px solid transparent; border-radius: 14px; background: var(--arkaplan);
+    color: var(--metin); font: inherit; cursor: pointer; text-align: center;
+  }
+  .urun-karti:hover, .urun-karti:focus-visible { border-color: var(--vurgu); }
+  .urun-karti svg { width: 56px; height: 56px; }
+  .urun-karti b { font-size: 1rem; }
+  .urun-karti span { font-size: .85rem; color: var(--soluk); }
+  .ozet { margin: 0; padding-left: 20px; line-height: 1.7; }
+
+  .bekleme { width: min(320px, 100%); height: 8px; border-radius: 99px; background: var(--yuzey); overflow: hidden; display: none; }
+  .bekleme.acik { display: block; }
+  .bekleme i { display: block; height: 100%; width: 0; background: var(--vurgu); }
+  .bekleme.acik i { animation: dol var(--bekleme, 6s) linear forwards; }
+  @keyframes dol { to { width: 100%; } }
+
+  details.ayarlar { width: min(760px, 100%); font-size: .9rem; }
+  details.ayarlar summary { cursor: pointer; text-align: center; color: var(--soluk); }
+  details.ayarlar .ust-satir { margin-top: 8px; }
+  select { font: inherit; padding: 2px 6px; border-radius: 6px; }
+
+  /* ========== FRONTEND EKLERİ ========== */
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .ust-satir label select { margin-left: 6px; }
+  .not { margin: 8px 0 0; text-align: center; color: var(--soluk); font-size: .85rem; }
+  .mesgul-notu { margin: 0; color: var(--soluk); font-size: .9rem; }
+  .mesgul-notu[hidden] { display: none; }
+  .duzeltme { padding: 10px 12px; border-radius: 12px; background: var(--yuzey); border: 1px dashed var(--vurgu); }
+  .duzeltme[hidden] { display: none; }
+  .duzeltme p { margin: 0 0 8px; text-align: center; }
+  .mikrofon {
+    flex: 0 0 auto; width: 46px; border-radius: 10px; border: 1px solid var(--vurgu);
+    background: var(--yuzey); color: var(--vurgu); cursor: pointer; touch-action: none;
+    display: grid; place-items: center;
+  }
+  .mikrofon svg { width: 22px; height: 22px; fill: currentColor; }
+  .mikrofon[hidden] { display: none; }
+  .mikrofon.dinliyor { background: var(--vurgu); color: var(--yuzey); }
+  @media (prefers-reduced-motion: no-preference) {
+    .mikrofon.dinliyor { animation: dinle 1.2s ease-in-out infinite; }
+  }
+  @keyframes dinle { 0%, 100% { box-shadow: 0 0 0 0 var(--vurgu); } 50% { box-shadow: 0 0 0 5px transparent; } }
+
+  /* ========== KARAKTER KURALLARI (görevli dosyasından) ========== */
+  
+  /* =========================================================
+     1. RENKLER
+     ========================================================= */
+  :root {
+    --arkaplan: #e9efee;  --yuzey: #ffffff;  --metin: #23302e;  --soluk: #6b7c78;  --vurgu: #2f6f73;
+
+    --ten-acik: #f3cfa9;  --ten: #e6b48a;  --ten-golge: #c99369;  --yanak: #e0857c;
+    --sac-acik: #6a4a38;  --sac: #3f2c25;
+    --sac-k-acik: #a1613d; --sac-k: #6b3a24;
+    --iris: #5a4632;  --cizgi: #2b211b;  --goz-aki: #fbfaf7;
+    --agiz-ici: #6e2a27;  --dil: #d46b67;  --dis: #fbfaf7;
+    --dudak: #c78c74;  --dudak-alt: #d39a82;  --dudak-k: #c45f68;  --dudak-k-alt: #d4777e;
+    --burun-delik: #8f5c40;  --kupe: #d4ad4a;
+    --gomlek-acik: #4f979b;  --gomlek: #3f7f83;  --gomlek-koyu: #2e6064;
+    --onluk-acik: #376a6d;   --onluk: #2a5457;   --onluk-koyu: #1e3f42;
+    --yaka: #eef1ec;
+    --pantolon-acik: #4b5468;  --pantolon: #3a4152;  --pantolon-koyu: #2a303d;
+    --ayakkabi: #23262d;  --taban: #ece8e0;  --bagcik: #d6d2ca;
+  }
+  
+
+  
+  
+  
+
+  
+  
+  
+  
+  
+  
+  
+
+  /* =========================================================
+     2. GERÇEKÇİLİK SEVİYELERİ
+     Her parça hangi seviyelerde görüneceğini sınıfıyla söyler:
+       .s1  → sadece Sade        .s12 → Sade ve Orta
+       .s2p → Orta ve Detaylı    .s3  → sadece Detaylı
+     Sınıfı olmayan parçalar her seviyede görünür.
+     ========================================================= */
+  [data-seviye="1"] .s2p, [data-seviye="1"] .s3,
+  [data-seviye="2"] .s1,  [data-seviye="2"] .s3,
+  [data-seviye="3"] .s1,  [data-seviye="3"] .s12 { display: none; }
+
+  /* Gradyan sadece Detaylı seviyede, diğerlerinde düz renk */
+  .yuz      { fill: var(--ten); }       [data-seviye="3"] .yuz      { fill: url(#g-yuz); }
+  .sac      { fill: var(--sac); }       [data-seviye="3"] .sac      { fill: url(#g-sac); }
+  .sac-k    { fill: var(--sac-k); }     [data-seviye="3"] .sac-k    { fill: url(#g-sac-k); }
+  .gomlek   { fill: var(--gomlek); }    [data-seviye="3"] .gomlek   { fill: url(#g-gomlek); }
+  .onluk    { fill: var(--onluk); }     [data-seviye="3"] .onluk    { fill: url(#g-onluk); }
+  .pantolon { fill: var(--pantolon); }  [data-seviye="3"] .pantolon { fill: url(#g-pantolon); }
+
+  /* Gradyan durak renkleri */
+  .d-ten-acik { stop-color: var(--ten-acik); }  .d-ten { stop-color: var(--ten); }  .d-ten-golge { stop-color: var(--ten-golge); }
+  .d-sac-acik { stop-color: var(--sac-acik); }  .d-sac { stop-color: var(--sac); }
+  .d-sac-k-acik { stop-color: var(--sac-k-acik); }  .d-sac-k { stop-color: var(--sac-k); }
+  .d-gomlek-acik { stop-color: var(--gomlek-acik); } .d-gomlek { stop-color: var(--gomlek); } .d-gomlek-koyu { stop-color: var(--gomlek-koyu); }
+  .d-onluk-acik { stop-color: var(--onluk-acik); }   .d-onluk { stop-color: var(--onluk); }   .d-onluk-koyu { stop-color: var(--onluk-koyu); }
+  .d-pantolon-acik { stop-color: var(--pantolon-acik); } .d-pantolon { stop-color: var(--pantolon); } .d-pantolon-koyu { stop-color: var(--pantolon-koyu); }
+
+  /* =========================================================
+     3. PARÇA RENKLERİ
+     ========================================================= */
+  .ten { fill: var(--ten); }   .ten-golge { fill: var(--ten-golge); }
+  .golge { fill: #000; opacity: .12; }
+  .cene-golge { fill: #000; opacity: .1; }
+  .yaka { fill: var(--yaka); }  .yanak { fill: var(--yanak); opacity: .22; }
+  .goz-aki { fill: var(--goz-aki); }  .iris { fill: var(--iris); }  .bebek { fill: var(--cizgi); }  .parilti { fill: #fff; }
+  .agiz-ici { fill: var(--agiz-ici); }  .dil { fill: var(--dil); }  .dis { fill: var(--dis); }
+  .ince { fill: none; stroke: var(--cizgi); stroke-width: 1.4; stroke-linecap: round; }
+  .agiz-cizgi { stroke-width: 1.8; }
+  .kadin .agiz-cizgi { stroke: var(--dudak-k); stroke-width: 2.2; }
+  .kas { fill: none; stroke: var(--sac); stroke-width: 2.6; stroke-linecap: round; }
+  .kadin .kas { stroke: var(--sac-k); stroke-width: 1.9; }
+  .kirpik { fill: none; stroke: var(--cizgi); stroke-width: 1.5; stroke-linecap: round; }
+  .kapak { fill: none; stroke: var(--ten-golge); stroke-width: 1; stroke-linecap: round; }
+  .tel { fill: none; stroke: var(--sac-acik); stroke-width: 1.4; stroke-linecap: round; opacity: .7; }
+  .tel-k { fill: none; stroke: var(--sac-k-acik); stroke-width: 1.4; stroke-linecap: round; opacity: .7; }
+  .kupe { fill: var(--kupe); }
+
+  .burun-golge { fill: none; stroke: var(--ten-golge); stroke-width: 1.6; stroke-linecap: round; opacity: .8; }
+  .burun-uc    { fill: none; stroke: var(--ten-golge); stroke-width: 1.3; stroke-linecap: round; }
+  .burun-delik { fill: var(--burun-delik); }
+  .parlama     { fill: #fff; opacity: .28; }
+
+  .dudak-ust { fill: var(--dudak); }  .dudak-alt { fill: var(--dudak-alt); }
+  .kadin .dudak-ust { fill: var(--dudak-k); }  .kadin .dudak-alt { fill: var(--dudak-k-alt); }
+  [data-seviye="3"] .agiz-ici { stroke: var(--dudak); stroke-width: 1.6; }
+  [data-seviye="3"] .kadin .agiz-ici { stroke: var(--dudak-k); stroke-width: 2; }
+
+  .kivrim { fill: none; stroke: #000; stroke-width: 1.2; stroke-linecap: round; opacity: .14; }
+  .dikis { fill: none; stroke: var(--onluk-koyu); stroke-width: 1.2; }
+  .aski { stroke: var(--onluk); stroke-width: 5; stroke-linecap: round; }
+  .kol-ten { stroke: var(--ten); stroke-linecap: round; fill: none; }
+  .parmak-cizgi { fill: none; stroke: var(--ten-golge); stroke-width: .9; stroke-linecap: round; }
+  .rozet { fill: var(--goz-aki); }
+  .rozet-yazi { fill: #23302e; font-size: 6px; font-weight: 700; }
+  .dugme { fill: var(--gomlek-koyu); }
+  .nokta { fill: var(--soluk); }
+  .parmak { stroke: var(--ten); stroke-width: 5; stroke-linecap: round; opacity: 0; transition: opacity .3s; }
+
+  .ayakkabi { fill: var(--ayakkabi); }  .taban { fill: var(--taban); }
+  .dil-ayk { fill: #3d4454; }
+  .bagcik { fill: none; stroke: var(--bagcik); stroke-width: 1.4; stroke-linecap: round; }
+  .taban-cizgi { fill: none; stroke: #000; stroke-width: .8; opacity: .18; }
+
+  /* =========================================================
+     4. EKLEMLER
+     Omuzdaki .omuz dairesi tam dönme noktasında duruyor:
+     merkezinden dönen bir daire hiç değişmiyormuş gibi görünür,
+     bu yüzden kol hangi açıda olursa olsun birleşim yeri hep yuvarlak kalır.
+     ========================================================= */
+  :root { --eklem-egri: cubic-bezier(.45, 0, .25, 1); }
+  .kol   { transition: transform .6s var(--eklem-egri); }
+  .onkol { transition: transform .6s var(--eklem-egri) .08s; }
+  .el    { transition: transform .6s var(--eklem-egri) .16s; }
+
+  .kol.sol   { transform-origin: 80px 130px; }   .kol.sag   { transform-origin: 160px 130px; }
+  .onkol.sol { transform-origin: 73px 204px; }   .onkol.sag { transform-origin: 167px 204px; }
+  .el.sol    { transform-origin: 70px 268px; }   .el.sag    { transform-origin: 170px 268px; }
+
+  .ust-govde    { animation: nefes 4.2s ease-in-out infinite; }
+  .kafa-salinim { transform-origin: 120px 104px; animation: salinim 7s ease-in-out infinite; }
+  .kadin .ust-govde    { animation-delay: -1.3s; }
+  .kadin .kafa-salinim { animation-delay: -2.5s; }
+  @keyframes nefes   { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(1.4px); } }
+  @keyframes salinim { 0%, 100% { transform: rotate(-.8deg); } 50% { transform: rotate(.8deg); } }
+
+  /* =========================================================
+     5. YÜZ
+     ========================================================= */
+  .kafa  { transform-origin: 120px 104px; transition: transform .5s var(--eklem-egri); }
+  .kas   { transition: transform .35s ease; }
+  .bakis { transition: transform .35s ease; }
+
+  .goz.sol { transform-origin: 106px 60px; transition: transform 70ms; }
+  .goz.sag { transform-origin: 134px 60px; transition: transform 70ms; }
+  .karakter[data-kirp="1"] .goz { transform: scaleY(.08); }
+
+  .gulumseme { transition: opacity 80ms; }
+  .acik-agiz { transform-origin: 120px 84px; transform: scale(1, 0); transition: transform 80ms; }
+  .agiz.a .acik-agiz { transform: scale(1, 1); }
+  .agiz.o .acik-agiz { transform: scale(.6, .95); }
+  .agiz.e .acik-agiz { transform: scale(1.1, .5); }
+  .agiz.a .gulumseme, .agiz.o .gulumseme, .agiz.e .gulumseme { opacity: 0; }
+
+  .noktalar { opacity: 0; transition: opacity .3s; }
+  .nokta { animation: zipla 1s infinite; }
+  .nokta:nth-child(2) { animation-delay: .15s; }
+  .nokta:nth-child(3) { animation-delay: .3s; }
+  @keyframes zipla { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-4px); } }
+
+  /* =========================================================
+     6. DURUMLAR VE JESTLER (iki karakterde de aynı iskelet)
+     ========================================================= */
+  .karakter[data-durum="dusunuyor"] .kafa      { transform: rotate(-5deg); }
+  .karakter[data-durum="dusunuyor"] .kas.sol   { transform: translateY(-3px); }
+  .karakter[data-durum="dusunuyor"] .bakis     { transform: translate(1.8px, -1.6px); }
+  .karakter[data-durum="dusunuyor"] .noktalar  { opacity: 1; }
+  .karakter[data-durum="dusunuyor"] .kol.sag   { transform: rotate(22deg); }
+  .karakter[data-durum="dusunuyor"] .onkol.sag { transform: rotate(150deg); }
+  .karakter[data-durum="dusunuyor"] .el.sag    { transform: rotate(-15deg); }
+
+  .karakter[data-jest="isaret"] .kol.sol   { transform: rotate(55deg); }
+  .karakter[data-jest="isaret"] .onkol.sol { transform: rotate(10deg); }
+  .karakter[data-jest="isaret"] .parmak    { opacity: 1; }
+  .karakter[data-jest="isaret"] .bakis     { transform: translate(-2px, .5px); }
+  .karakter[data-jest="isaret"] .kafa      { transform: rotate(-4deg); }
+
+  .karakter[data-jest="bekle"] .kol.sag   { transform: rotate(-30deg); }
+  .karakter[data-jest="bekle"] .onkol.sag { transform: rotate(-147deg); }
+  .karakter[data-jest="bekle"] .kas       { transform: translateY(-1.5px); }
+
+  .karakter[data-jest="omuz"] .kol.sol   { transform: rotate(4deg); }
+  .karakter[data-jest="omuz"] .onkol.sol { transform: rotate(105deg); }
+  .karakter[data-jest="omuz"] .el.sol    { transform: rotate(35deg); }
+  .karakter[data-jest="omuz"] .kol.sag   { transform: rotate(-4deg); }
+  .karakter[data-jest="omuz"] .onkol.sag { transform: rotate(-105deg); }
+  .karakter[data-jest="omuz"] .el.sag    { transform: rotate(-35deg); }
+  .karakter[data-jest="omuz"] .kas       { transform: translateY(-3px); }
+  .karakter[data-jest="omuz"] .kafa      { transform: rotate(5deg); }
+
+  .karakter[data-jest="anlat"] .kol.sol   { transform: rotate(6deg); }
+  .karakter[data-jest="anlat"] .onkol.sol { animation: anlat 2.2s var(--eklem-egri) infinite; }
+  .karakter[data-jest="anlat"] .kafa      { animation: onay 2.2s ease-in-out infinite; }
+  @keyframes anlat {
+    0%, 100% { transform: rotate(0deg); }
+    30%      { transform: rotate(-72deg); }
+    55%      { transform: rotate(-90deg); }
+    80%      { transform: rotate(-70deg); }
+  }
+  @keyframes onay { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(2deg); } }
+
+  /* =========================================================
+     7. KONTROLLER
+     ========================================================= */
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+  @media (prefers-reduced-motion: reduce) {
+    .nokta, .ust-govde, .kafa-salinim,
+    .karakter[data-jest="anlat"] .onkol.sol, .karakter[data-jest="anlat"] .kafa { animation: none; }
+    .kol, .onkol, .el, .kafa, .kas, .bakis, .acik-agiz, .gulumseme, .parmak { transition: none; }
+  }
+
+
+  /* ========== MARKET KURALLARI (market dosyasından) ========== */
+  
+  /* =========================================================
+     1. RENKLER
+     Arayüz temaya göre değişir; sahne bir çizim olduğu için sabit.
+     ========================================================= */
+  :root {
+    --arkaplan: #e9efee;  --yuzey: #ffffff;  --metin: #23302e;  --soluk: #6b7c78;  --vurgu: #2f6f73;
+
+    --tavan: #dfe3e1;  --lamba: #fffdf4;
+    --duvar: #efe9de;  --duvar-koyu: #e3dccd;  --supurgelik: #c9c0ae;
+    --zemin: #d9d4c9;  --zemin-koyu: #c7c1b4;  --karo: #c2bbad;
+    --dolap: #b9c2c4;  --dolap-cam: #d9eef2;  --dolap-cam-koyu: #bcdbe2;  --dolap-raf: #9fb0b4;
+    --reyon: #e8e6e0;  --reyon-yan: #cfccc3;  --reyon-panel: #f6f4ef;  --raf: #9a9488;  --kaide: #6f6a61;
+    --tabela-zemin: #2f6f73;
+    --r1: #5b7fa6;  --r2: #c08b3e;  --r3: #4f8f8a;  --r4: #7d9a5a;  --r5: #b06f7e;
+    --u1: #5b7fa6;  --u2: #d39a4a;  --u3: #c4575a;  --u4: #6f9e6a;  --u5: #8a74a8;
+    --etiket: #fbfaf6;  --pil: #3a3f4b;  --pil-uc: #c9b26a;
+    --kasa: #3e5c5f;  --kasa-ust: #2c4446;  --bant: #2b2f36;  --ekran: #2b2f36;  --ekran-ic: #8fd0c8;
+    --sepet: #c4575a;  --sepet-koyu: #9d3f43;
+    --yaprak: #6f9e6a;  --yaprak-koyu: #4f7d4c;  --saksi: #b9835a;
+    --vurgu-sahne: #f2b544;
+  }
+  
+
+  
+  
+  
+  
+  
+  
+
+  /* =========================================================
+     2. GERÇEKÇİLİK SEVİYELERİ (karakterlerle aynı sistem)
+     .s1 sadece Sade · .s2p Orta ve Detaylı · .s3 sadece Detaylı
+     ========================================================= */
+  [data-seviye="1"] .s2p, [data-seviye="1"] .s3,
+  [data-seviye="2"] .s1,  [data-seviye="2"] .s3,
+  [data-seviye="3"] .s1 { display: none; }
+
+  .duvar { fill: var(--duvar); }      [data-seviye="3"] .duvar { fill: url(#g-duvar); }
+  .zemin { fill: var(--zemin); }      [data-seviye="3"] .zemin { fill: url(#g-zemin); }
+  .dolap-cam { fill: var(--dolap-cam); } [data-seviye="3"] .dolap-cam { fill: url(#g-cam); }
+  .kapi-cam { fill: var(--dolap-cam); }  [data-seviye="3"] .kapi-cam { fill: url(#g-cam); }
+
+  .d-duvar { stop-color: var(--duvar); }  .d-duvar-koyu { stop-color: var(--duvar-koyu); }
+  .d-zemin { stop-color: var(--zemin); }  .d-zemin-koyu { stop-color: var(--zemin-koyu); }
+  .d-cam   { stop-color: var(--dolap-cam); } .d-cam-koyu { stop-color: var(--dolap-cam-koyu); }
+
+  /* =========================================================
+     3. PARÇA RENKLERİ
+     ========================================================= */
+  .tavan { fill: var(--tavan); }  .lamba { fill: var(--lamba); }
+  .isik-havuzu { fill: #fffbe8; opacity: .45; }
+  .supurgelik { fill: var(--supurgelik); }
+  .tabela-zemin { fill: var(--tabela-zemin); }
+  .tabela-yazi { fill: #fff; font-size: 18px; font-weight: 800; letter-spacing: 3px; }
+  .kucuk-tabela { fill: #4b4f4a; font-size: 9px; font-weight: 800; letter-spacing: 1.5px; }
+  .kucuk-tabela.acik { fill: #fff; }
+  .saat { fill: #fff; stroke: #6b6458; stroke-width: 2; }
+  .saat-kol { fill: none; stroke: #3a352e; stroke-width: 1.8; stroke-linecap: round; }
+
+  .dolap-govde { fill: var(--dolap); }  .dolap-ust { fill: #8d999c; }
+  .dolap-raf { fill: var(--dolap-raf); }
+  .dolap-urun { opacity: .75; }
+  .dolap-parlama { fill: #fff; opacity: .35; }
+  .kapi-kasa { fill: #8d999c; }
+
+  .karo { stroke: var(--karo); stroke-width: 1; }
+  .zemin-parlama { fill: url(#g-parlama); }
+
+  .u1 { fill: var(--u1); } .u2 { fill: var(--u2); } .u3 { fill: var(--u3); } .u4 { fill: var(--u4); } .u5 { fill: var(--u5); }
+  .r1-renk { fill: var(--r1); } .r2-renk { fill: var(--r2); } .r3-renk { fill: var(--r3); } .r4-renk { fill: var(--r4); } .r5-renk { fill: var(--r5); }
+
+  .uc-yuz { fill: var(--reyon); }  .yan-yuz { fill: var(--reyon-yan); }
+  .arka-panel { fill: var(--reyon-panel); }
+  .raf { fill: var(--raf); }  .yan-raf { stroke: var(--raf); stroke-width: 3; }
+  .kaide { fill: var(--kaide); }
+  
+  .etiket { fill: var(--etiket); opacity: .85; }
+  .fiyat { fill: #fff; stroke: #c9c3b6; stroke-width: .6; }
+  .pil { fill: var(--pil); }  .pil-uc { fill: var(--pil-uc); }
+  .kanca, .sap { fill: none; stroke: #4b4f4a; stroke-width: 1.6; stroke-linecap: round; }
+  .katlama { fill: none; stroke: #fff; stroke-width: 1; opacity: .5; }
+  .kapak-sise { fill: #f4f2ec; }
+  .ambalaj.seffaf { fill: #ffffff; opacity: .7; stroke: #cfc9bc; stroke-width: .6; }
+  .firca-kil { fill: #fff; }
+
+  .ip { stroke: #9d968a; stroke-width: 1.2; }
+  .tabela { stroke: rgba(0,0,0,.12); stroke-width: 1; }
+  .numara-zemin { fill: #fff; }
+  .numara { font-size: 15px; font-weight: 800; fill: #23302e; }
+  .tabela-ad { font-size: 12.5px; font-weight: 800; fill: #fff; }
+
+  .kasa-govde { fill: var(--kasa); }  .kasa-ust { fill: var(--kasa-ust); }
+  .bant { fill: var(--bant); }  .bant-cizgi { stroke: #474c55; stroke-width: 1; }
+  .direk { fill: #6b6458; }  .ekran { fill: var(--ekran); }  .ekran-ic { fill: var(--ekran-ic); }
+  .kasa-panel { fill: #ffffff; opacity: .08; }
+
+  .sepet { fill: var(--sepet); stroke: var(--sepet-koyu); stroke-width: 1.5; }
+  .sepet-ag { fill: none; stroke: var(--sepet-koyu); stroke-width: 1.2; }
+  .sepet-sap { fill: none; stroke: #3a352e; stroke-width: 2.4; stroke-linecap: round; }
+  .yaprak { fill: var(--yaprak); }  .yaprak.koyu { fill: var(--yaprak-koyu); }  .saksi { fill: var(--saksi); }
+
+  /* =========================================================
+     4. ETKİLEŞİM: reyona dokununca vurgulanır
+     ========================================================= */
+  .reyon { cursor: default; outline: none; }
+  .vurgu-cerceve { fill: none; stroke: var(--vurgu-sahne); stroke-width: 4; opacity: 0; transition: opacity .25s; }
+  .reyon:focus-visible .vurgu-cerceve,
+  .reyon.secili .vurgu-cerceve { opacity: 1; }
+  .asili-tabela .tabela { transition: transform .25s; transform-box: fill-box; transform-origin: center; }
+  .asili-tabela.secili .tabela { stroke: var(--vurgu-sahne); stroke-width: 3; }
+
+  /* =========================================================
+     5. KONTROLLER
+     ========================================================= */
+  
+  
+  
+  
+  
+
+
+  @media (prefers-reduced-motion: reduce) {
+    .yuruyor .bacak.sol, .yuruyor .bacak.sag,
+    .yuruyor .kol.sol, .yuruyor .kol.sag, .yuruyor .ust-govde { animation: none; }
+    .sohbet-kap, .urun-vurgu { transition: none; animation: none; }
+  }
+</style>
+</head>
+<body>
+<div class="sayfa">
+  <h1 class="sr-only">Mağazada bir görevliden yardım isteme provası</h1>
+
+  <div class="ust-satir">
+    <b>Zorluk:</b>
+    <label><input type="radio" name="zorluk" value="kolay"> Kolay</label>
+    <label><input type="radio" name="zorluk" value="orta" checked> Orta</label>
+    <label><input type="radio" name="zorluk" value="zor"> Zor</label>
+    <span aria-hidden="true">·</span>
+    <label><input type="checkbox" id="altyaziAc"> Altyazı</label>
+  </div>
+
+  <!-- Ayrıntılı ayarlar: boş bırakılanlar zorluk paketinden gelir -->
+  <details class="ayarlar">
+    <summary>Ayrıntılı ayarlar</summary>
+    <div class="ust-satir">
+      <label>Görevli
+        <select id="gorevliMod">
+          <option value="">Zorluğa göre</option>
+          <option value="bos">Boşta, bize dönük</option>
+          <option value="raf">Raf düzenliyor</option>
+          <option value="sohbet">Başka müşteriyle konuşuyor</option>
+        </select>
+      </label>
+      <label>Stok
+        <select id="stokMod">
+          <option value="">Zorluğa göre</option>
+          <option value="var">Var</option>
+          <option value="boyut">İstenen boyut yok</option>
+          <option value="yok">Hiç yok</option>
+        </select>
+      </label>
+      <label>Boyut
+        <select id="boyutMod">
+          <option value="">Zorluğa göre</option>
+          <option value="acik">Açık (ör. 1 litrelik süt)</option>
+          <option value="kapali">Kapalı (sadece süt)</option>
+        </select>
+      </label>
+    </div>
+    <div class="ust-satir">
+      <label>Görevlinin dili
+        <select id="dilMod">
+          <option value="">Zorluğa göre</option>
+          <option value="sade">Sade ve açık</option>
+          <option value="gundelik">Gündelik</option>
+        </select>
+      </label>
+      <label>Bekleme süresi
+        <select id="beklemeMod">
+          <option value="">Zorluğa göre</option>
+          <option value="5">Kısa</option>
+          <option value="10">Orta</option>
+          <option value="20">Uzun</option>
+        </select>
+      </label>
+    </div>
+    <p class="not">Bu satırlardaki ayarlar bir sonraki oyunda geçerli olur.</p>
+    <div class="ust-satir">
+      <label><input type="checkbox" id="kalabalikAc"> Diğer müşteriler</label>
+      <label><input type="checkbox" id="sesAc"> Market sesi</label>
+      <label><input type="checkbox" id="arkaPlanAc"> Arka plan konuşmaları</label>
+      <label><input type="checkbox" id="ayakAc" checked> Ayak sesi</label>
+    </div>
+    <div class="ust-satir">
+      <b>Gerçekçilik:</b>
+      <label><input type="radio" name="seviye" value="1"> Sade</label>
+      <label><input type="radio" name="seviye" value="2"> Orta</label>
+      <label><input type="radio" name="seviye" value="3" checked> Detaylı</label>
+    </div>
+  </details>
+
+  <div class="cerceve">
+    <svg id="sahne" data-seviye="3" viewBox="0 0 1200 640" role="img" aria-label="Market içi, görevli ve müşteri">
+
+    <defs>
+        <linearGradient id="g-duvar" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" class="d-duvar"/><stop offset="1" class="d-duvar-koyu"/>
+        </linearGradient>
+        <linearGradient id="g-zemin" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" class="d-zemin-koyu"/><stop offset="1" class="d-zemin"/>
+        </linearGradient>
+        <linearGradient id="g-cam" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" class="d-cam"/><stop offset="1" class="d-cam-koyu"/>
+        </linearGradient>
+        <radialGradient id="g-parlama" cx=".5" cy=".15" r=".6">
+          <stop offset="0" stop-color="#fff" stop-opacity=".35"/>
+          <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+        </radialGradient>
+      
+    <radialGradient id="g-yuz" cx=".42" cy=".38" r=".75">
+      <stop offset="0" class="d-ten-acik"/><stop offset=".6" class="d-ten"/><stop offset="1" class="d-ten-golge"/>
+    </radialGradient>
+    <linearGradient id="g-sac" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" class="d-sac-acik"/><stop offset="1" class="d-sac"/>
+    </linearGradient>
+    <linearGradient id="g-sac-k" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" class="d-sac-k-acik"/><stop offset="1" class="d-sac-k"/>
+    </linearGradient>
+    <!-- userSpaceOnUse: gövde, kol ve omuz aynı gradyanı paylaşır, ek yerinde renk farkı oluşmaz -->
+    <linearGradient id="g-gomlek" gradientUnits="userSpaceOnUse" x1="62" y1="0" x2="178" y2="0">
+      <stop offset="0" class="d-gomlek-acik"/><stop offset=".55" class="d-gomlek"/><stop offset="1" class="d-gomlek-koyu"/>
+    </linearGradient>
+    <linearGradient id="g-onluk" gradientUnits="userSpaceOnUse" x1="78" y1="0" x2="162" y2="0">
+      <stop offset="0" class="d-onluk-acik"/><stop offset=".5" class="d-onluk"/><stop offset="1" class="d-onluk-koyu"/>
+    </linearGradient>
+    <linearGradient id="g-pantolon" gradientUnits="userSpaceOnUse" x1="76" y1="0" x2="164" y2="0">
+      <stop offset="0" class="d-pantolon-acik"/><stop offset=".5" class="d-pantolon"/><stop offset="1" class="d-pantolon-koyu"/>
+    </linearGradient>
+  </defs>
+    <g class="dunya" id="dunya">
+<!-- TAVAN -->
+<rect class="tavan" x="0" y="0" width="1200" height="60"/>
+<rect class="lamba" x="80" y="22" width="120" height="8" rx="3"/>
+<ellipse class="isik-havuzu s3" cx="140" cy="34" rx="80" ry="12"/>
+<rect class="lamba" x="290" y="22" width="120" height="8" rx="3"/>
+<ellipse class="isik-havuzu s3" cx="350" cy="34" rx="80" ry="12"/>
+<rect class="lamba" x="500" y="22" width="120" height="8" rx="3"/>
+<ellipse class="isik-havuzu s3" cx="560" cy="34" rx="80" ry="12"/>
+<rect class="lamba" x="710" y="22" width="120" height="8" rx="3"/>
+<ellipse class="isik-havuzu s3" cx="770" cy="34" rx="80" ry="12"/>
+<rect class="lamba" x="920" y="22" width="120" height="8" rx="3"/>
+<ellipse class="isik-havuzu s3" cx="980" cy="34" rx="80" ry="12"/>
+<rect class="lamba" x="1130" y="22" width="120" height="8" rx="3"/>
+<ellipse class="isik-havuzu s3" cx="1190" cy="34" rx="80" ry="12"/>
+<!-- ARKA DUVAR -->
+<rect class="duvar" x="0" y="60" width="1200" height="270"/>
+<rect class="supurgelik" x="0" y="322" width="1200" height="8"/>
+<rect class="tabela-zemin" x="470" y="72" width="260" height="34" rx="6"/>
+<text class="tabela-yazi" x="600" y="95" text-anchor="middle">MAHALLE MARKET</text>
+<g class="s2p"><circle class="saat" cx="1130" cy="100" r="16"/><path class="saat-kol" d="M1130 100 L1130 90 M1130 100 L1137 104"/></g>
+<!-- ARKA DUVARDAKİ BUZDOLAPLARI -->
+<rect class="dolap-govde" x="40" y="140" width="1000" height="190" rx="4"/>
+<rect class="dolap-cam" x="48" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="51" y="190" width="68" height="2"/>
+<rect class="dolap-urun u4" x="54" y="172" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="62" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="70" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="78" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="86" y="176" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="94" y="172" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="104" y="176" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="112" y="172" width="6" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="51" y="230" width="68" height="2"/>
+<rect class="dolap-urun u5" x="54" y="216" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="62" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="74" y="212" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="82" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="94" y="212" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="104" y="208" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="112" y="212" width="10" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="51" y="270" width="68" height="2"/>
+<rect class="dolap-urun u5" x="54" y="256" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="66" y="248" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="74" y="256" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="86" y="248" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="94" y="256" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="104" y="252" width="8" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="51" y="306" width="68" height="2"/>
+<rect class="dolap-urun u3" x="54" y="284" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="64" y="288" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="72" y="284" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="80" y="284" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u4" x="90" y="288" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="100" y="288" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="112" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-parlama s3" x="54" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-cam" x="130" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="133" y="190" width="68" height="2"/>
+<rect class="dolap-urun u2" x="136" y="176" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="146" y="172" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="156" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="164" y="168" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="174" y="168" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u4" x="184" y="172" width="10" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="133" y="230" width="68" height="2"/>
+<rect class="dolap-urun u3" x="136" y="216" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="144" y="212" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="156" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="168" y="208" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u4" x="180" y="212" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="192" y="208" width="8" height="22" rx="1.5"/>
+<rect class="dolap-raf" x="133" y="270" width="68" height="2"/>
+<rect class="dolap-urun u2" x="136" y="252" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="146" y="248" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="154" y="256" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="162" y="256" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="174" y="252" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="184" y="256" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="192" y="252" width="10" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="133" y="306" width="68" height="2"/>
+<rect class="dolap-urun u5" x="136" y="292" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="146" y="288" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="158" y="288" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="170" y="292" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="178" y="292" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="186" y="284" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="194" y="288" width="10" height="18" rx="1.5"/>
+<rect class="dolap-parlama s3" x="136" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-cam" x="212" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="215" y="190" width="68" height="2"/>
+<rect class="dolap-urun u1" x="218" y="172" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="228" y="176" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="238" y="172" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="250" y="172" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="258" y="168" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="270" y="172" width="10" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="215" y="230" width="68" height="2"/>
+<rect class="dolap-urun u4" x="218" y="212" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="228" y="212" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="236" y="208" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="246" y="216" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="254" y="212" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="262" y="212" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="274" y="216" width="6" height="14" rx="1.5"/>
+<rect class="dolap-raf" x="215" y="270" width="68" height="2"/>
+<rect class="dolap-urun u1" x="218" y="256" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="230" y="252" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="242" y="256" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="250" y="252" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="258" y="252" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="270" y="252" width="6" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="215" y="306" width="68" height="2"/>
+<rect class="dolap-urun u4" x="218" y="288" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="228" y="288" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="238" y="292" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="246" y="284" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="256" y="284" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="264" y="292" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="272" y="288" width="6" height="18" rx="1.5"/>
+<rect class="dolap-parlama s3" x="218" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-cam" x="294" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="297" y="190" width="68" height="2"/>
+<rect class="dolap-urun u3" x="300" y="176" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="312" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="320" y="168" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="330" y="172" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="338" y="168" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="350" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u4" x="358" y="176" width="6" height="14" rx="1.5"/>
+<rect class="dolap-raf" x="297" y="230" width="68" height="2"/>
+<rect class="dolap-urun u2" x="300" y="208" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="308" y="208" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="318" y="208" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="326" y="212" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="336" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="348" y="212" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="358" y="212" width="6" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="297" y="270" width="68" height="2"/>
+<rect class="dolap-urun u4" x="300" y="256" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="308" y="256" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="318" y="252" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="330" y="256" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="340" y="248" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="348" y="252" width="10" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="297" y="306" width="68" height="2"/>
+<rect class="dolap-urun u4" x="300" y="288" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="308" y="284" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u4" x="318" y="284" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="328" y="288" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="340" y="284" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="348" y="292" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="356" y="284" width="8" height="22" rx="1.5"/>
+<rect class="dolap-parlama s3" x="300" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-cam" x="376" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="379" y="190" width="68" height="2"/>
+<rect class="dolap-urun u4" x="382" y="168" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="394" y="168" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="404" y="168" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="416" y="176" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="424" y="168" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="436" y="172" width="6" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="379" y="230" width="68" height="2"/>
+<rect class="dolap-urun u2" x="382" y="216" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="392" y="212" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="404" y="208" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="414" y="208" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="424" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="436" y="212" width="10" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="379" y="270" width="68" height="2"/>
+<rect class="dolap-urun u5" x="382" y="248" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="392" y="256" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="404" y="248" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="416" y="252" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="424" y="256" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="432" y="256" width="8" height="14" rx="1.5"/>
+<rect class="dolap-raf" x="379" y="306" width="68" height="2"/>
+<rect class="dolap-urun u5" x="382" y="284" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="390" y="292" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="400" y="284" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="412" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="424" y="292" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="432" y="292" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="440" y="288" width="10" height="18" rx="1.5"/>
+<rect class="dolap-parlama s3" x="382" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-cam" x="458" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="461" y="190" width="68" height="2"/>
+<rect class="dolap-urun u3" x="464" y="176" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="474" y="168" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="486" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="494" y="172" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="506" y="172" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="518" y="168" width="10" height="22" rx="1.5"/>
+<rect class="dolap-raf" x="461" y="230" width="68" height="2"/>
+<rect class="dolap-urun u4" x="464" y="208" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="472" y="216" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="482" y="212" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="492" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="504" y="212" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="512" y="208" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="522" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-raf" x="461" y="270" width="68" height="2"/>
+<rect class="dolap-urun u2" x="464" y="256" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="474" y="252" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="482" y="252" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="492" y="248" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="500" y="248" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u4" x="510" y="252" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="520" y="256" width="8" height="14" rx="1.5"/>
+<rect class="dolap-raf" x="461" y="306" width="68" height="2"/>
+<rect class="dolap-urun u3" x="464" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="476" y="292" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="486" y="288" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="496" y="288" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="506" y="284" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="516" y="292" width="6" height="14" rx="1.5"/>
+<rect class="dolap-parlama s3" x="464" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-cam" x="540" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="543" y="190" width="68" height="2"/>
+<rect class="dolap-urun u3" x="546" y="176" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="554" y="172" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="562" y="172" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="570" y="168" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="580" y="176" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="592" y="168" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="602" y="176" width="8" height="14" rx="1.5"/>
+<rect class="dolap-raf" x="543" y="230" width="68" height="2"/>
+<rect class="dolap-urun u4" x="546" y="208" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="554" y="216" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="564" y="208" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="572" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="584" y="216" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="594" y="212" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="602" y="208" width="8" height="22" rx="1.5"/>
+<rect class="dolap-raf" x="543" y="270" width="68" height="2"/>
+<rect class="dolap-urun u1" x="546" y="248" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="554" y="248" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="566" y="256" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="574" y="256" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="582" y="252" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="594" y="248" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="602" y="252" width="10" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="543" y="306" width="68" height="2"/>
+<rect class="dolap-urun u1" x="546" y="288" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="556" y="288" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="564" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="576" y="284" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u4" x="584" y="288" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="592" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="604" y="284" width="8" height="22" rx="1.5"/>
+<rect class="dolap-parlama s3" x="546" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-cam" x="622" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="625" y="190" width="68" height="2"/>
+<rect class="dolap-urun u3" x="628" y="172" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="640" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="648" y="172" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="656" y="172" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="666" y="176" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="674" y="168" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="686" y="172" width="6" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="625" y="230" width="68" height="2"/>
+<rect class="dolap-urun u4" x="628" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="640" y="208" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="652" y="208" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="660" y="216" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="670" y="216" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="680" y="216" width="8" height="14" rx="1.5"/>
+<rect class="dolap-raf" x="625" y="270" width="68" height="2"/>
+<rect class="dolap-urun u3" x="628" y="252" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="640" y="256" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="648" y="256" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="658" y="256" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="668" y="256" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="678" y="248" width="10" height="22" rx="1.5"/>
+<rect class="dolap-raf" x="625" y="306" width="68" height="2"/>
+<rect class="dolap-urun u1" x="628" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="640" y="292" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="650" y="292" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="660" y="292" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="670" y="288" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="680" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-parlama s3" x="628" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-cam" x="704" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="707" y="190" width="68" height="2"/>
+<rect class="dolap-urun u5" x="710" y="176" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="722" y="172" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="732" y="176" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="742" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u4" x="750" y="168" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="762" y="168" width="10" height="22" rx="1.5"/>
+<rect class="dolap-raf" x="707" y="230" width="68" height="2"/>
+<rect class="dolap-urun u5" x="710" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="722" y="208" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="730" y="208" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="742" y="216" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="750" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="762" y="216" width="8" height="14" rx="1.5"/>
+<rect class="dolap-raf" x="707" y="270" width="68" height="2"/>
+<rect class="dolap-urun u1" x="710" y="248" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="718" y="248" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="730" y="252" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="740" y="252" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="748" y="248" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u4" x="756" y="256" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="768" y="252" width="6" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="707" y="306" width="68" height="2"/>
+<rect class="dolap-urun u2" x="710" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="722" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="734" y="288" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="744" y="288" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="756" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="768" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-parlama s3" x="710" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-cam" x="786" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="789" y="190" width="68" height="2"/>
+<rect class="dolap-urun u3" x="792" y="172" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="802" y="168" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="814" y="176" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="824" y="172" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="834" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="842" y="172" width="10" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="789" y="230" width="68" height="2"/>
+<rect class="dolap-urun u4" x="792" y="212" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="802" y="212" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="810" y="216" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="820" y="212" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="828" y="212" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="836" y="212" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="846" y="216" width="6" height="14" rx="1.5"/>
+<rect class="dolap-raf" x="789" y="270" width="68" height="2"/>
+<rect class="dolap-urun u2" x="792" y="248" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="800" y="248" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u5" x="812" y="252" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="820" y="248" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="832" y="256" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="844" y="256" width="8" height="14" rx="1.5"/>
+<rect class="dolap-raf" x="789" y="306" width="68" height="2"/>
+<rect class="dolap-urun u2" x="792" y="288" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="800" y="292" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="810" y="288" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="820" y="288" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="830" y="288" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="838" y="292" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="848" y="288" width="6" height="18" rx="1.5"/>
+<rect class="dolap-parlama s3" x="792" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-cam" x="868" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="871" y="190" width="68" height="2"/>
+<rect class="dolap-urun u3" x="874" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="882" y="172" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="892" y="172" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="902" y="176" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="912" y="172" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="920" y="176" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="928" y="168" width="6" height="22" rx="1.5"/>
+<rect class="dolap-raf" x="871" y="230" width="68" height="2"/>
+<rect class="dolap-urun u5" x="874" y="212" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="884" y="212" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="892" y="212" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="900" y="208" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="912" y="208" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u4" x="920" y="208" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="930" y="208" width="6" height="22" rx="1.5"/>
+<rect class="dolap-raf" x="871" y="270" width="68" height="2"/>
+<rect class="dolap-urun u5" x="874" y="252" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="882" y="256" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="890" y="252" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="900" y="252" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="910" y="252" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="922" y="252" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="932" y="248" width="8" height="22" rx="1.5"/>
+<rect class="dolap-raf" x="871" y="306" width="68" height="2"/>
+<rect class="dolap-urun u2" x="874" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="886" y="292" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="894" y="288" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="906" y="288" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u5" x="916" y="288" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="924" y="292" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="932" y="292" width="8" height="14" rx="1.5"/>
+<rect class="dolap-parlama s3" x="874" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-cam" x="950" y="150" width="74" height="166" rx="2"/>
+<rect class="dolap-raf" x="953" y="190" width="68" height="2"/>
+<rect class="dolap-urun u2" x="956" y="176" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="966" y="172" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="976" y="176" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u5" x="984" y="172" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="994" y="176" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="1004" y="172" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u3" x="1012" y="172" width="10" height="18" rx="1.5"/>
+<rect class="dolap-raf" x="953" y="230" width="68" height="2"/>
+<rect class="dolap-urun u5" x="956" y="216" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="968" y="208" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u2" x="980" y="216" width="8" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="990" y="212" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="1000" y="212" width="8" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="1010" y="216" width="6" height="14" rx="1.5"/>
+<rect class="dolap-raf" x="953" y="270" width="68" height="2"/>
+<rect class="dolap-urun u5" x="956" y="248" width="8" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="966" y="252" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u4" x="974" y="252" width="10" height="18" rx="1.5"/>
+<rect class="dolap-urun u1" x="986" y="252" width="6" height="18" rx="1.5"/>
+<rect class="dolap-urun u2" x="994" y="256" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u1" x="1002" y="248" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u4" x="1014" y="248" width="10" height="22" rx="1.5"/>
+<rect class="dolap-raf" x="953" y="306" width="68" height="2"/>
+<rect class="dolap-urun u1" x="956" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u2" x="968" y="292" width="6" height="14" rx="1.5"/>
+<rect class="dolap-urun u3" x="976" y="284" width="6" height="22" rx="1.5"/>
+<rect class="dolap-urun u3" x="984" y="292" width="10" height="14" rx="1.5"/>
+<rect class="dolap-urun u4" x="996" y="284" width="10" height="22" rx="1.5"/>
+<rect class="dolap-urun u1" x="1008" y="284" width="6" height="22" rx="1.5"/>
+<rect class="dolap-parlama s3" x="956" y="152" width="10" height="160" rx="3"/>
+<rect class="dolap-ust" x="40" y="132" width="1000" height="14" rx="3"/>
+<text class="kucuk-tabela" x="540" y="143" text-anchor="middle">SÜT · İÇECEK · DONDURULMUŞ</text>
+<!-- GİRİŞ / ÇIKIŞ KAPISI -->
+<rect class="kapi-kasa" x="1066" y="150" width="120" height="176"/>
+<rect class="kapi-cam" x="1072" y="156" width="52" height="170"/>
+<rect class="kapi-cam" x="1128" y="156" width="52" height="170"/>
+<rect class="dolap-parlama s3" x="1078" y="160" width="8" height="150" rx="3"/>
+<rect class="dolap-parlama s3" x="1134" y="160" width="8" height="150" rx="3"/>
+<rect class="tabela-zemin" x="1080" y="128" width="92" height="18" rx="4"/>
+<text class="kucuk-tabela acik" x="1126" y="141" text-anchor="middle">GİRİŞ · ÇIKIŞ</text>
+<!-- ZEMİN (perspektifli karolar) -->
+<rect class="zemin" x="0" y="330" width="1200" height="310"/>
+<g class="s2p">
+<line class="karo" x1="112.2" y1="330" x2="-1400" y2="640"/>
+<line class="karo" x1="141.5" y1="330" x2="-1280" y2="640"/>
+<line class="karo" x1="170.7" y1="330" x2="-1160" y2="640"/>
+<line class="karo" x1="200" y1="330" x2="-1040" y2="640"/>
+<line class="karo" x1="229.3" y1="330" x2="-920" y2="640"/>
+<line class="karo" x1="258.5" y1="330" x2="-800" y2="640"/>
+<line class="karo" x1="287.8" y1="330" x2="-680" y2="640"/>
+<line class="karo" x1="317.1" y1="330" x2="-560" y2="640"/>
+<line class="karo" x1="346.3" y1="330" x2="-440" y2="640"/>
+<line class="karo" x1="375.6" y1="330" x2="-320" y2="640"/>
+<line class="karo" x1="404.9" y1="330" x2="-200" y2="640"/>
+<line class="karo" x1="434.1" y1="330" x2="-80" y2="640"/>
+<line class="karo" x1="463.4" y1="330" x2="40" y2="640"/>
+<line class="karo" x1="492.7" y1="330" x2="160" y2="640"/>
+<line class="karo" x1="522" y1="330" x2="280" y2="640"/>
+<line class="karo" x1="551.2" y1="330" x2="400" y2="640"/>
+<line class="karo" x1="580.5" y1="330" x2="520" y2="640"/>
+<line class="karo" x1="609.8" y1="330" x2="640" y2="640"/>
+<line class="karo" x1="639" y1="330" x2="760" y2="640"/>
+<line class="karo" x1="668.3" y1="330" x2="880" y2="640"/>
+<line class="karo" x1="697.6" y1="330" x2="1000" y2="640"/>
+<line class="karo" x1="726.8" y1="330" x2="1120" y2="640"/>
+<line class="karo" x1="756.1" y1="330" x2="1240" y2="640"/>
+<line class="karo" x1="785.4" y1="330" x2="1360" y2="640"/>
+<line class="karo" x1="814.6" y1="330" x2="1480" y2="640"/>
+<line class="karo" x1="843.9" y1="330" x2="1600" y2="640"/>
+<line class="karo" x1="873.2" y1="330" x2="1720" y2="640"/>
+<line class="karo" x1="902.4" y1="330" x2="1840" y2="640"/>
+<line class="karo" x1="931.7" y1="330" x2="1960" y2="640"/>
+<line class="karo" x1="961" y1="330" x2="2080" y2="640"/>
+<line class="karo" x1="990.2" y1="330" x2="2200" y2="640"/>
+<line class="karo" x1="1019.5" y1="330" x2="2320" y2="640"/>
+<line class="karo" x1="1048.8" y1="330" x2="2440" y2="640"/>
+<line class="karo" x1="1078" y1="330" x2="2560" y2="640"/>
+<line class="karo" x1="1107.3" y1="330" x2="2680" y2="640"/>
+<line class="karo" x1="0" y1="330" x2="1200" y2="330"/>
+<line class="karo" x1="0" y1="352" x2="1200" y2="352"/>
+<line class="karo" x1="0" y1="378.8" x2="1200" y2="378.8"/>
+<line class="karo" x1="0" y1="411.6" x2="1200" y2="411.6"/>
+<line class="karo" x1="0" y1="451.5" x2="1200" y2="451.5"/>
+<line class="karo" x1="0" y1="500.3" x2="1200" y2="500.3"/>
+<line class="karo" x1="0" y1="559.7" x2="1200" y2="559.7"/>
+<line class="karo" x1="0" y1="632.3" x2="1200" y2="632.3"/>
+</g>
+<rect class="zemin-parlama s3" x="0" y="330" width="1200" height="310"/>
+
+      <!-- REYON ARALARINDAKİ MÜŞTERİLER (reyonların arkasında kalır) -->
+      <svg class="npc kalabalik" id="npc1" x="606.7" y="300.1" width="154.6" height="169.3" viewBox="-90 0 420 460" style="--gomlek:#6f8db3;--gomlek-acik:#8fa8c8;--gomlek-koyu:#5a769b;--pantolon:#4a4038;--sac:#2b2420;--sac-k:#2b2420;--ten:#c99a76;--ten-golge:#a87c5c;--ten-acik:#c99a76" aria-hidden="true">
+    <ellipse class="golge" cx="120" cy="443" rx="62" ry="6"/>
+    <path class="pantolon" d="M76 250 Q120 258 164 250 L162 420 L128 420 L120 296 L112 420 L78 420 Z"/>
+    
+    <path class="ayakkabi s1" d="M76 418 Q72 434 86 437 L114 437 Q119 428 112 418 Z"/>
+    <g class="s2p">
+      <path class="taban"    d="M70 432 Q69 441 79 441 L113 441 Q119 441 118 432 Z"/>
+      <path class="ayakkabi" d="M80 413 Q72 416 70.5 426 Q69.5 434 78 435 L113 435 Q118.5 434 117.5 427 Q116.5 417 111 413 Z"/>
+      <path class="dil-ayk s3" d="M86 414 Q92 412 100 414 L99 424 Q92 425 87 424 Z"/>
+      <path class="bagcik s3"  d="M85 418 L101 417"/>
+      <path class="bagcik s3"  d="M84.5 422 L101.5 421"/>
+      <ellipse class="parlama s3" cx="78" cy="428" rx="5" ry="2.2"/>
+      <path class="taban-cizgi s3" d="M71 436 L117 436"/>
+    </g>
+    <path class="ayakkabi s1" d="M 164 418 Q 168 434 154 437 L 126 437 Q 121 428 128 418 Z"/>
+    <g class="s2p">
+      <path class="taban"    d="M 170 432 Q 171 441 161 441 L 127 441 Q 121 441 122 432 Z"/>
+      <path class="ayakkabi" d="M 160 413 Q 168 416 169.5 426 Q 170.5 434 162 435 L 127 435 Q 121.5 434 122.5 427 Q 123.5 417 129 413 Z"/>
+      <path class="dil-ayk s3" d="M 154 414 Q 148 412 140 414 L 141 424 Q 148 425 153 424 Z"/>
+      <path class="bagcik s3"  d="M 155 418 L 139 417"/>
+      <path class="bagcik s3"  d="M 155.5 422 L 138.5 421"/>
+      <ellipse class="parlama s3" cx="162" cy="428" rx="5" ry="2.2"/>
+      <path class="taban-cizgi s3" d="M 169 436 L 123 436"/>
+    </g>
+    <g class="ust-govde">
+      <rect class="ten-golge" x="111" y="92" width="18" height="26" rx="4"/>
+      <path class="gomlek" d="M82 120 Q120 110 158 120 Q168 124 170 140 L166 256 Q120 262 74 256 L70 140 Q72 124 82 120 Z"/>
+      <path class="bisiklet-yaka" d="M106 116 Q120 128 134 116"/>
+      <path class="kivrim s3" d="M86 150 Q92 170 88 192"/>
+      <path class="kivrim s3" d="M154 150 Q148 170 152 192"/>
+      
+      <g class="kol sol">
+        <line class="kol-ten" x1="80" y1="130" x2="73" y2="204" stroke-width="15"/>
+        <path class="gomlek" d="M68.5 129 Q69 118 80 118 Q91.5 118 92 130 L88.5 172 L63.5 169.5 Z"/>
+        <path class="kivrim s3" d="M64.5 165.5 L88.8 168"/>
+        <circle class="gomlek omuz" cx="80" cy="130" r="12"/>
+        <g class="onkol sol">
+          <line class="kol-ten" x1="73" y1="204" x2="70" y2="268" stroke-width="13"/>
+          <g class="el sol">
+            <line class="parmak" x1="70" y1="290" x2="70" y2="304"/>
+            <path class="ten" d="M63 266 Q60 284 65 292 Q70 298 76 293 Q80 284 77 266 Z"/>
+            <path class="ten-golge" d="M76 272 Q84 276 81 285 Q79 288 76 284 Z"/>
+            <path class="parmak-cizgi s3" d="M66 287 L66.5 293 M70 289 L70 295.5 M74 287 L73.5 293"/>
+          </g>
+        </g>
+      </g>
+      <g class="kol sag">
+        <line class="kol-ten" x1="160" y1="130" x2="167" y2="204" stroke-width="15"/>
+        <path class="gomlek" d="M 171.5 129 Q 171 118 160 118 Q 148.5 118 148 130 L 151.5 172 L 176.5 169.5 Z"/>
+        <path class="kivrim s3" d="M 175.5 165.5 L 151.2 168"/>
+        <circle class="gomlek omuz" cx="160" cy="130" r="12"/>
+        <g class="onkol sag">
+          <line class="kol-ten" x1="167" y1="204" x2="170" y2="268" stroke-width="13"/>
+          <g class="el sag">
+            <rect class="kutu" x="158" y="280" width="24" height="17" rx="2"/>
+            <rect class="kutu-etiket" x="162" y="284" width="10" height="8" rx="1"/>
+            
+            <path class="ten" d="M 177 266 Q 180 284 175 292 Q 170 298 164 293 Q 160 284 163 266 Z"/>
+            <path class="ten-golge" d="M 164 272 Q 156 276 159 285 Q 161 288 164 284 Z"/>
+            <path class="parmak-cizgi s3" d="M 174 287 L 173.5 293 M 170 289 L 170 295.5 M 166 287 L 166.5 293"/>
+          </g>
+        </g>
+      </g>
+      <g class="kafa-salinim"><g class="kafa">
+          <ellipse class="ten-golge" cx="90"  cy="66" rx="5" ry="8"/>
+          <ellipse class="ten-golge" cx="150" cy="66" rx="5" ry="8"/>
+          <path class="yuz" d="M90 55 Q90 100 120 102 Q150 100 150 55 Q150 22 120 22 Q90 22 90 55 Z"/>
+          <path class="sac" d="M88 60 Q82 18 120 13 Q158 14 153 58 Q151 42 142 34 Q128 42 104 37 Q94 42 92 60 Z"/>
+          <path class="tel s3" d="M98 24 Q110 17 126 20"/>
+          <path class="tel s3" d="M132 22 Q145 27 149 42"/>
+          <path class="kas sol" d="M100 51 Q106 47 113 50"/>
+          <path class="kas sag" d="M127 50 Q134 47 140 51"/>
+          
+          <g class="goz sol">
+            <g class="bakis s1"><circle class="bebek" cx="106" cy="60" r="2.8"/></g>
+            
+            <g class="s2p">
+              <ellipse class="goz-aki" cx="106" cy="60" rx="5.5" ry="3.8"/>
+              <g class="bakis">
+                <circle class="iris"    cx="106"   cy="60" r="2.7"/>
+                <circle class="bebek"   cx="106"   cy="60" r="1.3"/>
+                <circle class="parilti" cx="107" cy="59" r=".7"/>
+              </g>
+              <path class="ince" style="stroke-width:1.4" d="M100 58.5 Q106 55 112 58.5"/>
+              <path class="kapak s3" d="M101 55.6 Q106 53 111 55.6"/>
+            </g>
+          </g>
+          
+          <g class="goz sag">
+            <g class="bakis s1"><circle class="bebek" cx="134" cy="60" r="2.8"/></g>
+            
+            <g class="s2p">
+              <ellipse class="goz-aki" cx="134" cy="60" rx="5.5" ry="3.8"/>
+              <g class="bakis">
+                <circle class="iris"    cx="134"   cy="60" r="2.7"/>
+                <circle class="bebek"   cx="134"   cy="60" r="1.3"/>
+                <circle class="parilti" cx="135" cy="59" r=".7"/>
+              </g>
+              <path class="ince" style="stroke-width:1.4" d="M128 58.5 Q134 55 140 58.5"/>
+              <path class="kapak s3" d="M129 55.6 Q134 53 139 55.6"/>
+            </g>
+          </g>
+          
+          <path class="ince s12" d="M120 63 Q117 72 121 74"/>
+          <g class="s3">
+            <path class="burun-golge" d="M117.5 58 Q115.8 66 115.6 71.5"/>
+            <path class="burun-uc" d="M115.2 71.8 Q116.6 75.6 120 75.6 Q123.4 75.6 124.8 71.8"/>
+            <ellipse class="burun-delik" cx="117.4" cy="73.8" rx="1.3" ry=".8"/>
+            <ellipse class="burun-delik" cx="122.6" cy="73.8" rx="1.3" ry=".8"/>
+            <ellipse class="parlama" cx="120.6" cy="71.2" rx="1.5" ry="1"/>
+          </g>
+          <circle class="yanak" cx="103" cy="74" r="5"/>
+          <circle class="yanak" cx="137" cy="74" r="5"/>
+          
+          <g class="agiz">
+            <path class="ince gulumseme s12 agiz-cizgi" d="M113 83 Q120 88 127 83"/>
+            <g class="gulumseme s3">
+              <path class="dudak-ust" d="M113.5 83 Q116.5 81.3 120 82 Q123.5 81.3 126.5 83 Q120 84 113.5 83 Z"/>
+              <path class="dudak-alt" d="M114 83.4 Q120 87.6 126 83.4 Q120 84.6 114 83.4 Z"/>
+              <path class="ince" style="stroke-width:.9" d="M113.5 83 Q120 84.7 126.5 83"/>
+            </g>
+            <g class="acik-agiz">
+              <ellipse class="agiz-ici" cx="120" cy="84" rx="6.5" ry="4.5"/>
+              <ellipse class="dil"      cx="120" cy="86.6" rx="3.5" ry="1.6"/>
+              <rect    class="dis"      x="115" y="79.9" width="10" height="1.8" rx=".8"/>
+            </g>
+          </g></g></g>
+    </g>
+  </svg><svg class="musteri-arka kalabalik" id="npc2" x="34.3" y="284.8" width="121.4" height="132.9" viewBox="-90 0 420 460" style="--kazak:#7d9a5a;--kazak-koyu:#627d45;--kot:#3b3f47;--sac-m:#8a6a4a;--sac-m-acik:#a68560" aria-hidden="true">
+    <ellipse class="golge" cx="120" cy="442" rx="56" ry="6"/>
+    
+    <g class="bacak sol">
+      <path class="kot" d="M88 248 L120 248 L117 420 L92 420 Z"/>
+      <path class="kivrim s3" d="M100 300 L101 410"/>
+      <path class="ayakkabi-arka" d="M89 416 Q86 437 101 439 Q115 439 117 418 Z"/>
+      <path class="taban-arka s2p" d="M88 432 Q90 441 101 441 Q114 441 116.5 432 Z"/>
+    </g>
+    <g class="bacak sag">
+      <path class="kot" d="M 152 248 L 120 248 L 123 420 L 148 420 Z"/>
+      <path class="kivrim s3" d="M 140 300 L 139 410"/>
+      <path class="ayakkabi-arka" d="M 151 416 Q 154 437 139 439 Q 125 439 123 418 Z"/>
+      <path class="taban-arka s2p" d="M 152 432 Q 150 441 139 441 Q 126 441 123.5 432 Z"/>
+    </g>
+    <g class="ust-govde">
+      <rect class="ten-golge" x="109" y="88" width="22" height="30" rx="5"/>
+      <path class="kazak" d="M82 120 Q120 110 158 120 Q168 124 170 140 L168 258 Q120 266 72 258 L70 140 Q72 124 82 120 Z"/>
+      <path class="ribana" d="M71.5 248 Q120 256 168.5 248 L168 262 Q120 270 72 262 Z"/>
+      <path class="yaka-arka" d="M104 116 Q120 124 136 116 L134 112 Q120 118 106 112 Z"/>
+      <path class="kivrim s3" d="M120 126 L120 246"/>
+      
+      <g class="kol sol">
+        <line class="kol-kazak" x1="80" y1="130" x2="73" y2="204" stroke-width="18"/>
+        <circle class="kazak omuz" cx="80" cy="130" r="10.5"/>
+        <g class="onkol sol">
+          <line class="kol-kazak" x1="73" y1="204" x2="70" y2="262" stroke-width="15"/>
+          <line class="manset" x1="70.3" y1="258" x2="70" y2="266" stroke-width="15"/>
+          <g class="el sol">
+            <path class="ten" d="M63 266 Q60 284 65 292 Q70 298 76 293 Q80 284 77 266 Z"/>
+          </g>
+        </g>
+      </g>
+      <g class="kol sag">
+        <line class="kol-kazak" x1="160" y1="130" x2="167" y2="204" stroke-width="18"/>
+        <circle class="kazak omuz" cx="160" cy="130" r="10.5"/>
+        <g class="onkol sag">
+          <line class="kol-kazak" x1="167" y1="204" x2="170" y2="262" stroke-width="15"/>
+          <line class="manset" x1="169.7" y1="258" x2="170" y2="266" stroke-width="15"/>
+          <g class="el sag">
+            <path class="ten" d="M 177 266 Q 180 284 175 292 Q 170 298 164 293 Q 160 284 163 266 Z"/>
+          </g>
+        </g>
+      </g>
+      
+      <g class="kafa-salinim"><g class="kafa">
+        <ellipse class="ten-golge" cx="90"  cy="64" rx="5" ry="8"/>
+        <ellipse class="ten-golge" cx="150" cy="64" rx="5" ry="8"/>
+        <path class="sac-m" d="M90 58 Q88 18 120 15 Q152 18 150 58 Q150 92 120 97 Q90 92 90 58 Z"/>
+        <path class="tel-m s3" d="M104 26 Q112 50 108 80"/>
+        <path class="tel-m s3" d="M134 26 Q128 50 132 80"/>
+      </g></g>
+    </g>
+  </svg>
+<!-- REYONLAR -->
+<g class="reyon" data-reyon="1" data-ad="Elektronik" data-icerik="Pil, şarj aleti, ampul, kulaklık" tabindex="0" role="button" aria-label="1. reyon: Elektronik">
+  <ellipse class="golge s3" cx="220" cy="486" rx="84.0" ry="10"/>
+  <path class="yan-yuz" d="M286 258 L348.8 252.4 L348.8 431.6 L286 482 Z"/>
+  <line class="yan-raf" x1="286" y1="306" x2="348.8" y2="290.8"/>
+  <line class="yan-raf" x1="286" y1="356" x2="348.8" y2="330.8"/>
+  <line class="yan-raf" x1="286" y1="406" x2="348.8" y2="370.8"/>
+  <line class="yan-raf" x1="286" y1="456" x2="348.8" y2="410.8"/>
+  <rect class="uc-yuz" x="154" y="258" width="132" height="224" rx="3"/>
+  <rect class="arka-panel" x="160" y="266" width="120" height="200"/>
+  <rect class="baslik-panel r1-renk" x="154" y="258" width="132" height="14" rx="3"/>
+  <rect class="ambalaj u1" x="163.0" y="274" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="167.0" y="280" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="168.5" y="278" width="3" height="2"/>
+  <rect class="ambalaj u3" x="180.0" y="274" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="184.0" y="280" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="185.5" y="278" width="3" height="2"/>
+  <rect class="ambalaj u5" x="197.0" y="274" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="201.0" y="280" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="202.5" y="278" width="3" height="2"/>
+  <rect class="ambalaj u5" x="214.0" y="274" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="218.0" y="280" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="219.5" y="278" width="3" height="2"/>
+  <rect class="ambalaj u1" x="231.0" y="274" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="235.0" y="280" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="236.5" y="278" width="3" height="2"/>
+  <rect class="ambalaj u3" x="248.0" y="274" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="252.0" y="280" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="253.5" y="278" width="3" height="2"/>
+  <rect class="ambalaj u3" x="265.0" y="274" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="269.0" y="280" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="270.5" y="278" width="3" height="2"/>
+  <rect class="fiyat s3" x="170" y="307" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="204" y="307" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="238" y="307" width="12" height="6" rx="1"/>
+  <rect class="raf" x="158" y="306" width="124" height="5" rx="1"/>
+  <rect class="ambalaj u1" x="163.0" y="324" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="167.0" y="330" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="168.5" y="328" width="3" height="2"/>
+  <rect class="ambalaj u5" x="180.0" y="324" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="184.0" y="330" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="185.5" y="328" width="3" height="2"/>
+  <rect class="ambalaj u1" x="197.0" y="324" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="201.0" y="330" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="202.5" y="328" width="3" height="2"/>
+  <rect class="ambalaj u1" x="214.0" y="324" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="218.0" y="330" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="219.5" y="328" width="3" height="2"/>
+  <rect class="ambalaj u5" x="231.0" y="324" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="235.0" y="330" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="236.5" y="328" width="3" height="2"/>
+  <rect class="ambalaj u3" x="248.0" y="324" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="252.0" y="330" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="253.5" y="328" width="3" height="2"/>
+  <rect class="ambalaj u3" x="265.0" y="324" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="269.0" y="330" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="270.5" y="328" width="3" height="2"/>
+  <rect class="fiyat s3" x="170" y="357" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="204" y="357" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="238" y="357" width="12" height="6" rx="1"/>
+  <rect class="raf" x="158" y="356" width="124" height="5" rx="1"/>
+  <rect class="ambalaj u3" x="163.0" y="374" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="167.0" y="380" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="168.5" y="378" width="3" height="2"/>
+  <rect class="ambalaj u3" x="180.0" y="374" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="184.0" y="380" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="185.5" y="378" width="3" height="2"/>
+  <rect class="ambalaj u5" x="197.0" y="374" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="201.0" y="380" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="202.5" y="378" width="3" height="2"/>
+  <rect class="ambalaj u1" x="214.0" y="374" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="218.0" y="380" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="219.5" y="378" width="3" height="2"/>
+  <rect class="ambalaj u3" x="231.0" y="374" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="235.0" y="380" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="236.5" y="378" width="3" height="2"/>
+  <rect class="ambalaj u5" x="248.0" y="374" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="252.0" y="380" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="253.5" y="378" width="3" height="2"/>
+  <rect class="ambalaj u1" x="265.0" y="374" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="269.0" y="380" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="270.5" y="378" width="3" height="2"/>
+  <rect class="fiyat s3" x="170" y="407" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="204" y="407" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="238" y="407" width="12" height="6" rx="1"/>
+  <rect class="raf" x="158" y="406" width="124" height="5" rx="1"/>
+  <rect class="ambalaj u5" x="163.0" y="424" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="167.0" y="430" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="168.5" y="428" width="3" height="2"/>
+  <rect class="ambalaj u1" x="180.0" y="424" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="184.0" y="430" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="185.5" y="428" width="3" height="2"/>
+  <rect class="ambalaj u1" x="197.0" y="424" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="201.0" y="430" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="202.5" y="428" width="3" height="2"/>
+  <rect class="ambalaj u3" x="214.0" y="424" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="218.0" y="430" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="219.5" y="428" width="3" height="2"/>
+  <rect class="ambalaj u5" x="231.0" y="424" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="235.0" y="430" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="236.5" y="428" width="3" height="2"/>
+  <rect class="ambalaj u5" x="248.0" y="424" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="252.0" y="430" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="253.5" y="428" width="3" height="2"/>
+  <rect class="ambalaj u3" x="265.0" y="424" width="14" height="30" rx="1.5"/>
+  <rect class="pil s2p" x="269.0" y="430" width="6" height="14" rx="1"/>
+  <rect class="pil-uc s2p" x="270.5" y="428" width="3" height="2"/>
+  <rect class="fiyat s3" x="170" y="457" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="204" y="457" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="238" y="457" width="12" height="6" rx="1"/>
+  <rect class="raf" x="158" y="456" width="124" height="5" rx="1"/>
+  <rect class="kaide" x="154" y="468" width="132" height="14" rx="2"/>
+  <rect class="vurgu-cerceve" x="150" y="254" width="140" height="232" rx="6"/>
+</g>
+<g class="reyon" data-reyon="2" data-ad="Gıda" data-icerik="Konserve, makarna, kahvaltılık" tabindex="0" role="button" aria-label="2. reyon: Gıda">
+  <ellipse class="golge s3" cx="410" cy="486" rx="84.0" ry="10"/>
+  <path class="yan-yuz" d="M476 258 L500.8 252.4 L500.8 431.6 L476 482 Z"/>
+  <line class="yan-raf" x1="476" y1="306" x2="500.8" y2="290.8"/>
+  <line class="yan-raf" x1="476" y1="356" x2="500.8" y2="330.8"/>
+  <line class="yan-raf" x1="476" y1="406" x2="500.8" y2="370.8"/>
+  <line class="yan-raf" x1="476" y1="456" x2="500.8" y2="410.8"/>
+  <rect class="uc-yuz" x="344" y="258" width="132" height="224" rx="3"/>
+  <rect class="arka-panel" x="350" y="266" width="120" height="200"/>
+  <rect class="baslik-panel r2-renk" x="344" y="258" width="132" height="14" rx="3"/>
+  <rect class="ambalaj u2" x="353.0" y="284" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="353.0" y="290" width="13" height="7"/>
+  <rect class="ambalaj u1" x="368.0" y="284" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="368.0" y="290" width="13" height="7"/>
+  <rect class="ambalaj u3" x="383.0" y="270" width="20" height="34" rx="1"/>
+  <circle class="etiket s2p" cx="393.0" cy="286" r="5"/>
+  <rect class="ambalaj u1" x="405.0" y="284" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="405.0" y="290" width="13" height="7"/>
+  <rect class="ambalaj u4" x="420.0" y="284" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="420.0" y="290" width="13" height="7"/>
+  <rect class="ambalaj u2" x="435.0" y="284" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="435.0" y="290" width="13" height="7"/>
+  <rect class="ambalaj u2" x="450.0" y="270" width="20" height="34" rx="1"/>
+  <circle class="etiket s2p" cx="460.0" cy="286" r="5"/>
+  <rect class="fiyat s3" x="360" y="307" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="394" y="307" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="428" y="307" width="12" height="6" rx="1"/>
+  <rect class="raf" x="348" y="306" width="124" height="5" rx="1"/>
+  <rect class="ambalaj u1" x="353.0" y="334" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="353.0" y="340" width="13" height="7"/>
+  <rect class="ambalaj u2" x="368.0" y="334" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="368.0" y="340" width="13" height="7"/>
+  <rect class="ambalaj u2" x="383.0" y="320" width="20" height="34" rx="1"/>
+  <circle class="etiket s2p" cx="393.0" cy="336" r="5"/>
+  <rect class="ambalaj u3" x="405.0" y="320" width="20" height="34" rx="1"/>
+  <circle class="etiket s2p" cx="415.0" cy="336" r="5"/>
+  <rect class="ambalaj u2" x="427.0" y="334" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="427.0" y="340" width="13" height="7"/>
+  <rect class="ambalaj u2" x="442.0" y="334" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="442.0" y="340" width="13" height="7"/>
+  <rect class="fiyat s3" x="360" y="357" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="394" y="357" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="428" y="357" width="12" height="6" rx="1"/>
+  <rect class="raf" x="348" y="356" width="124" height="5" rx="1"/>
+  <rect class="ambalaj u2" x="353.0" y="384" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="353.0" y="390" width="13" height="7"/>
+  <rect class="ambalaj u4" x="368.0" y="384" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="368.0" y="390" width="13" height="7"/>
+  <rect class="ambalaj u1" x="383.0" y="384" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="383.0" y="390" width="13" height="7"/>
+  <rect class="ambalaj u2" x="398.0" y="384" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="398.0" y="390" width="13" height="7"/>
+  <rect class="ambalaj u5" x="413.0" y="370" width="20" height="34" rx="1"/>
+  <circle class="etiket s2p" cx="423.0" cy="386" r="5"/>
+  <rect class="ambalaj u1" x="435.0" y="384" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="435.0" y="390" width="13" height="7"/>
+  <rect class="ambalaj u1" x="450.0" y="384" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="450.0" y="390" width="13" height="7"/>
+  <rect class="fiyat s3" x="360" y="407" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="394" y="407" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="428" y="407" width="12" height="6" rx="1"/>
+  <rect class="raf" x="348" y="406" width="124" height="5" rx="1"/>
+  <rect class="ambalaj u4" x="353.0" y="434" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="353.0" y="440" width="13" height="7"/>
+  <rect class="ambalaj u2" x="368.0" y="434" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="368.0" y="440" width="13" height="7"/>
+  <rect class="ambalaj u3" x="383.0" y="420" width="20" height="34" rx="1"/>
+  <circle class="etiket s2p" cx="393.0" cy="436" r="5"/>
+  <rect class="ambalaj u1" x="405.0" y="434" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="405.0" y="440" width="13" height="7"/>
+  <rect class="ambalaj u4" x="420.0" y="434" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="420.0" y="440" width="13" height="7"/>
+  <rect class="ambalaj u1" x="435.0" y="434" width="13" height="20" rx="2"/>
+  <rect class="etiket s2p" x="435.0" y="440" width="13" height="7"/>
+  <rect class="ambalaj u2" x="450.0" y="420" width="20" height="34" rx="1"/>
+  <circle class="etiket s2p" cx="460.0" cy="436" r="5"/>
+  <rect class="fiyat s3" x="360" y="457" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="394" y="457" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="428" y="457" width="12" height="6" rx="1"/>
+  <rect class="raf" x="348" y="456" width="124" height="5" rx="1"/>
+  <rect class="kaide" x="344" y="468" width="132" height="14" rx="2"/>
+  <rect class="vurgu-cerceve" x="340" y="254" width="140" height="232" rx="6"/>
+</g>
+<g class="reyon" data-reyon="3" data-ad="Ev ve Yağmur" data-icerik="Şemsiye, yağmurluk, mutfak eşyası" tabindex="0" role="button" aria-label="3. reyon: Ev ve Yağmur">
+  <ellipse class="golge s3" cx="600" cy="486" rx="84.0" ry="10"/>
+  <rect class="uc-yuz" x="534" y="258" width="132" height="224" rx="3"/>
+  <rect class="arka-panel" x="540" y="266" width="120" height="200"/>
+  <rect class="baslik-panel r3-renk" x="534" y="258" width="132" height="14" rx="3"/>
+  <path class="kanca" d="M548.0 262 q0 -4 4 -4"/>
+  <path class="semsiye u1" d="M548.0 266 Q554.0 278 551.0 294 L545.0 294 Q542.0 278 548.0 266 Z"/>
+  <path class="sap" d="M548.0 294 L548.0 300 q0 4 -4 4"/>
+  <path class="kanca" d="M564.0 262 q0 -4 4 -4"/>
+  <path class="semsiye u1" d="M564.0 266 Q570.0 278 567.0 294 L561.0 294 Q558.0 278 564.0 266 Z"/>
+  <path class="sap" d="M564.0 294 L564.0 300 q0 4 -4 4"/>
+  <path class="kanca" d="M580.0 262 q0 -4 4 -4"/>
+  <path class="semsiye u2" d="M580.0 266 Q586.0 278 583.0 294 L577.0 294 Q574.0 278 580.0 266 Z"/>
+  <path class="sap" d="M580.0 294 L580.0 300 q0 4 -4 4"/>
+  <path class="kanca" d="M596.0 262 q0 -4 4 -4"/>
+  <path class="semsiye u3" d="M596.0 266 Q602.0 278 599.0 294 L593.0 294 Q590.0 278 596.0 266 Z"/>
+  <path class="sap" d="M596.0 294 L596.0 300 q0 4 -4 4"/>
+  <path class="kanca" d="M612.0 262 q0 -4 4 -4"/>
+  <path class="semsiye u2" d="M612.0 266 Q618.0 278 615.0 294 L609.0 294 Q606.0 278 612.0 266 Z"/>
+  <path class="sap" d="M612.0 294 L612.0 300 q0 4 -4 4"/>
+  <path class="kanca" d="M628.0 262 q0 -4 4 -4"/>
+  <path class="semsiye u2" d="M628.0 266 Q634.0 278 631.0 294 L625.0 294 Q622.0 278 628.0 266 Z"/>
+  <path class="sap" d="M628.0 294 L628.0 300 q0 4 -4 4"/>
+  <path class="kanca" d="M644.0 262 q0 -4 4 -4"/>
+  <path class="semsiye u5" d="M644.0 266 Q650.0 278 647.0 294 L641.0 294 Q638.0 278 644.0 266 Z"/>
+  <path class="sap" d="M644.0 294 L644.0 300 q0 4 -4 4"/>
+  <rect class="fiyat s3" x="550" y="307" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="584" y="307" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="618" y="307" width="12" height="6" rx="1"/>
+  <rect class="raf" x="538" y="306" width="124" height="5" rx="1"/>
+  <path class="kanca" d="M548.0 312 q0 -4 4 -4"/>
+  <path class="semsiye u4" d="M548.0 316 Q554.0 328 551.0 344 L545.0 344 Q542.0 328 548.0 316 Z"/>
+  <path class="sap" d="M548.0 344 L548.0 350 q0 4 -4 4"/>
+  <path class="kanca" d="M564.0 312 q0 -4 4 -4"/>
+  <path class="semsiye u1" d="M564.0 316 Q570.0 328 567.0 344 L561.0 344 Q558.0 328 564.0 316 Z"/>
+  <path class="sap" d="M564.0 344 L564.0 350 q0 4 -4 4"/>
+  <path class="kanca" d="M580.0 312 q0 -4 4 -4"/>
+  <path class="semsiye u3" d="M580.0 316 Q586.0 328 583.0 344 L577.0 344 Q574.0 328 580.0 316 Z"/>
+  <path class="sap" d="M580.0 344 L580.0 350 q0 4 -4 4"/>
+  <path class="kanca" d="M596.0 312 q0 -4 4 -4"/>
+  <path class="semsiye u4" d="M596.0 316 Q602.0 328 599.0 344 L593.0 344 Q590.0 328 596.0 316 Z"/>
+  <path class="sap" d="M596.0 344 L596.0 350 q0 4 -4 4"/>
+  <path class="kanca" d="M612.0 312 q0 -4 4 -4"/>
+  <path class="semsiye u3" d="M612.0 316 Q618.0 328 615.0 344 L609.0 344 Q606.0 328 612.0 316 Z"/>
+  <path class="sap" d="M612.0 344 L612.0 350 q0 4 -4 4"/>
+  <path class="kanca" d="M628.0 312 q0 -4 4 -4"/>
+  <path class="semsiye u3" d="M628.0 316 Q634.0 328 631.0 344 L625.0 344 Q622.0 328 628.0 316 Z"/>
+  <path class="sap" d="M628.0 344 L628.0 350 q0 4 -4 4"/>
+  <path class="kanca" d="M644.0 312 q0 -4 4 -4"/>
+  <path class="semsiye u4" d="M644.0 316 Q650.0 328 647.0 344 L641.0 344 Q638.0 328 644.0 316 Z"/>
+  <path class="sap" d="M644.0 344 L644.0 350 q0 4 -4 4"/>
+  <rect class="fiyat s3" x="550" y="357" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="584" y="357" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="618" y="357" width="12" height="6" rx="1"/>
+  <rect class="raf" x="538" y="356" width="124" height="5" rx="1"/>
+  <rect class="ambalaj u3" x="543.0" y="388" width="24" height="16" rx="3"/>
+  <path class="katlama s2p" d="M546.0 396 L564.0 396"/>
+  <rect class="ambalaj u2" x="570.0" y="388" width="24" height="16" rx="3"/>
+  <path class="katlama s2p" d="M573.0 396 L591.0 396"/>
+  <rect class="ambalaj u2" x="597.0" y="388" width="24" height="16" rx="3"/>
+  <path class="katlama s2p" d="M600.0 396 L618.0 396"/>
+  <rect class="ambalaj u2" x="624.0" y="388" width="24" height="16" rx="3"/>
+  <path class="katlama s2p" d="M627.0 396 L645.0 396"/>
+  <rect class="fiyat s3" x="550" y="407" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="584" y="407" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="618" y="407" width="12" height="6" rx="1"/>
+  <rect class="raf" x="538" y="406" width="124" height="5" rx="1"/>
+  <rect class="ambalaj u4" x="543.0" y="438" width="24" height="16" rx="3"/>
+  <path class="katlama s2p" d="M546.0 446 L564.0 446"/>
+  <rect class="ambalaj u2" x="570.0" y="438" width="24" height="16" rx="3"/>
+  <path class="katlama s2p" d="M573.0 446 L591.0 446"/>
+  <rect class="ambalaj u4" x="597.0" y="438" width="24" height="16" rx="3"/>
+  <path class="katlama s2p" d="M600.0 446 L618.0 446"/>
+  <rect class="ambalaj u5" x="624.0" y="438" width="24" height="16" rx="3"/>
+  <path class="katlama s2p" d="M627.0 446 L645.0 446"/>
+  <rect class="fiyat s3" x="550" y="457" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="584" y="457" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="618" y="457" width="12" height="6" rx="1"/>
+  <rect class="raf" x="538" y="456" width="124" height="5" rx="1"/>
+  <rect class="kaide" x="534" y="468" width="132" height="14" rx="2"/>
+  <rect class="vurgu-cerceve" x="530" y="254" width="140" height="232" rx="6"/>
+</g>
+<g class="reyon" data-reyon="4" data-ad="Temizlik" data-icerik="Deterjan, sabun, temizlik bezi" tabindex="0" role="button" aria-label="4. reyon: Temizlik">
+  <ellipse class="golge s3" cx="790" cy="486" rx="84.0" ry="10"/>
+  <path class="yan-yuz" d="M724 258 L699.2 252.4 L699.2 431.6 L724 482 Z"/>
+  <line class="yan-raf" x1="724" y1="306" x2="699.2" y2="290.8"/>
+  <line class="yan-raf" x1="724" y1="356" x2="699.2" y2="330.8"/>
+  <line class="yan-raf" x1="724" y1="406" x2="699.2" y2="370.8"/>
+  <line class="yan-raf" x1="724" y1="456" x2="699.2" y2="410.8"/>
+  <rect class="uc-yuz" x="724" y="258" width="132" height="224" rx="3"/>
+  <rect class="arka-panel" x="730" y="266" width="120" height="200"/>
+  <rect class="baslik-panel r4-renk" x="724" y="258" width="132" height="14" rx="3"/>
+  <path class="ambalaj u1" d="M733.0 304 L733.0 280 Q733.0 276 736.0 275 L736.0 270 L742.0 270 L742.0 275 Q745.0 276 745.0 280 L745.0 304 Z"/>
+  <rect class="kapak-sise" x="736.0" y="267" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="734.0" y="284" width="10" height="9"/>
+  <path class="ambalaj u1" d="M748.0 304 L748.0 284 Q748.0 280 751.0 279 L751.0 274 L757.0 274 L757.0 279 Q760.0 280 760.0 284 L760.0 304 Z"/>
+  <rect class="kapak-sise" x="751.0" y="271" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="749.0" y="288" width="10" height="9"/>
+  <path class="ambalaj u3" d="M763.0 304 L763.0 284 Q763.0 280 766.0 279 L766.0 274 L772.0 274 L772.0 279 Q775.0 280 775.0 284 L775.0 304 Z"/>
+  <rect class="kapak-sise" x="766.0" y="271" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="764.0" y="288" width="10" height="9"/>
+  <path class="ambalaj u3" d="M778.0 304 L778.0 288 Q778.0 284 781.0 283 L781.0 278 L787.0 278 L787.0 283 Q790.0 284 790.0 288 L790.0 304 Z"/>
+  <rect class="kapak-sise" x="781.0" y="275" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="779.0" y="292" width="10" height="9"/>
+  <path class="ambalaj u1" d="M793.0 304 L793.0 280 Q793.0 276 796.0 275 L796.0 270 L802.0 270 L802.0 275 Q805.0 276 805.0 280 L805.0 304 Z"/>
+  <rect class="kapak-sise" x="796.0" y="267" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="794.0" y="284" width="10" height="9"/>
+  <path class="ambalaj u3" d="M808.0 304 L808.0 288 Q808.0 284 811.0 283 L811.0 278 L817.0 278 L817.0 283 Q820.0 284 820.0 288 L820.0 304 Z"/>
+  <rect class="kapak-sise" x="811.0" y="275" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="809.0" y="292" width="10" height="9"/>
+  <path class="ambalaj u3" d="M823.0 304 L823.0 280 Q823.0 276 826.0 275 L826.0 270 L832.0 270 L832.0 275 Q835.0 276 835.0 280 L835.0 304 Z"/>
+  <rect class="kapak-sise" x="826.0" y="267" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="824.0" y="284" width="10" height="9"/>
+  <rect class="fiyat s3" x="740" y="307" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="774" y="307" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="808" y="307" width="12" height="6" rx="1"/>
+  <rect class="raf" x="728" y="306" width="124" height="5" rx="1"/>
+  <path class="ambalaj u3" d="M733.0 354 L733.0 338 Q733.0 334 736.0 333 L736.0 328 L742.0 328 L742.0 333 Q745.0 334 745.0 338 L745.0 354 Z"/>
+  <rect class="kapak-sise" x="736.0" y="325" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="734.0" y="342" width="10" height="9"/>
+  <path class="ambalaj u3" d="M748.0 354 L748.0 334 Q748.0 330 751.0 329 L751.0 324 L757.0 324 L757.0 329 Q760.0 330 760.0 334 L760.0 354 Z"/>
+  <rect class="kapak-sise" x="751.0" y="321" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="749.0" y="338" width="10" height="9"/>
+  <path class="ambalaj u4" d="M763.0 354 L763.0 334 Q763.0 330 766.0 329 L766.0 324 L772.0 324 L772.0 329 Q775.0 330 775.0 334 L775.0 354 Z"/>
+  <rect class="kapak-sise" x="766.0" y="321" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="764.0" y="338" width="10" height="9"/>
+  <path class="ambalaj u1" d="M778.0 354 L778.0 330 Q778.0 326 781.0 325 L781.0 320 L787.0 320 L787.0 325 Q790.0 326 790.0 330 L790.0 354 Z"/>
+  <rect class="kapak-sise" x="781.0" y="317" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="779.0" y="334" width="10" height="9"/>
+  <path class="ambalaj u3" d="M793.0 354 L793.0 338 Q793.0 334 796.0 333 L796.0 328 L802.0 328 L802.0 333 Q805.0 334 805.0 338 L805.0 354 Z"/>
+  <rect class="kapak-sise" x="796.0" y="325" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="794.0" y="342" width="10" height="9"/>
+  <path class="ambalaj u4" d="M808.0 354 L808.0 334 Q808.0 330 811.0 329 L811.0 324 L817.0 324 L817.0 329 Q820.0 330 820.0 334 L820.0 354 Z"/>
+  <rect class="kapak-sise" x="811.0" y="321" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="809.0" y="338" width="10" height="9"/>
+  <path class="ambalaj u1" d="M823.0 354 L823.0 334 Q823.0 330 826.0 329 L826.0 324 L832.0 324 L832.0 329 Q835.0 330 835.0 334 L835.0 354 Z"/>
+  <rect class="kapak-sise" x="826.0" y="321" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="824.0" y="338" width="10" height="9"/>
+  <rect class="fiyat s3" x="740" y="357" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="774" y="357" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="808" y="357" width="12" height="6" rx="1"/>
+  <rect class="raf" x="728" y="356" width="124" height="5" rx="1"/>
+  <path class="ambalaj u1" d="M733.0 404 L733.0 384 Q733.0 380 736.0 379 L736.0 374 L742.0 374 L742.0 379 Q745.0 380 745.0 384 L745.0 404 Z"/>
+  <rect class="kapak-sise" x="736.0" y="371" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="734.0" y="388" width="10" height="9"/>
+  <path class="ambalaj u1" d="M748.0 404 L748.0 388 Q748.0 384 751.0 383 L751.0 378 L757.0 378 L757.0 383 Q760.0 384 760.0 388 L760.0 404 Z"/>
+  <rect class="kapak-sise" x="751.0" y="375" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="749.0" y="392" width="10" height="9"/>
+  <path class="ambalaj u3" d="M763.0 404 L763.0 388 Q763.0 384 766.0 383 L766.0 378 L772.0 378 L772.0 383 Q775.0 384 775.0 388 L775.0 404 Z"/>
+  <rect class="kapak-sise" x="766.0" y="375" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="764.0" y="392" width="10" height="9"/>
+  <path class="ambalaj u4" d="M778.0 404 L778.0 388 Q778.0 384 781.0 383 L781.0 378 L787.0 378 L787.0 383 Q790.0 384 790.0 388 L790.0 404 Z"/>
+  <rect class="kapak-sise" x="781.0" y="375" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="779.0" y="392" width="10" height="9"/>
+  <path class="ambalaj u4" d="M793.0 404 L793.0 384 Q793.0 380 796.0 379 L796.0 374 L802.0 374 L802.0 379 Q805.0 380 805.0 384 L805.0 404 Z"/>
+  <rect class="kapak-sise" x="796.0" y="371" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="794.0" y="388" width="10" height="9"/>
+  <path class="ambalaj u3" d="M808.0 404 L808.0 384 Q808.0 380 811.0 379 L811.0 374 L817.0 374 L817.0 379 Q820.0 380 820.0 384 L820.0 404 Z"/>
+  <rect class="kapak-sise" x="811.0" y="371" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="809.0" y="388" width="10" height="9"/>
+  <path class="ambalaj u3" d="M823.0 404 L823.0 380 Q823.0 376 826.0 375 L826.0 370 L832.0 370 L832.0 375 Q835.0 376 835.0 380 L835.0 404 Z"/>
+  <rect class="kapak-sise" x="826.0" y="367" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="824.0" y="384" width="10" height="9"/>
+  <rect class="fiyat s3" x="740" y="407" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="774" y="407" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="808" y="407" width="12" height="6" rx="1"/>
+  <rect class="raf" x="728" y="406" width="124" height="5" rx="1"/>
+  <path class="ambalaj u1" d="M733.0 454 L733.0 434 Q733.0 430 736.0 429 L736.0 424 L742.0 424 L742.0 429 Q745.0 430 745.0 434 L745.0 454 Z"/>
+  <rect class="kapak-sise" x="736.0" y="421" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="734.0" y="438" width="10" height="9"/>
+  <path class="ambalaj u4" d="M748.0 454 L748.0 430 Q748.0 426 751.0 425 L751.0 420 L757.0 420 L757.0 425 Q760.0 426 760.0 430 L760.0 454 Z"/>
+  <rect class="kapak-sise" x="751.0" y="417" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="749.0" y="434" width="10" height="9"/>
+  <path class="ambalaj u4" d="M763.0 454 L763.0 434 Q763.0 430 766.0 429 L766.0 424 L772.0 424 L772.0 429 Q775.0 430 775.0 434 L775.0 454 Z"/>
+  <rect class="kapak-sise" x="766.0" y="421" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="764.0" y="438" width="10" height="9"/>
+  <path class="ambalaj u3" d="M778.0 454 L778.0 434 Q778.0 430 781.0 429 L781.0 424 L787.0 424 L787.0 429 Q790.0 430 790.0 434 L790.0 454 Z"/>
+  <rect class="kapak-sise" x="781.0" y="421" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="779.0" y="438" width="10" height="9"/>
+  <path class="ambalaj u1" d="M793.0 454 L793.0 430 Q793.0 426 796.0 425 L796.0 420 L802.0 420 L802.0 425 Q805.0 426 805.0 430 L805.0 454 Z"/>
+  <rect class="kapak-sise" x="796.0" y="417" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="794.0" y="434" width="10" height="9"/>
+  <path class="ambalaj u4" d="M808.0 454 L808.0 430 Q808.0 426 811.0 425 L811.0 420 L817.0 420 L817.0 425 Q820.0 426 820.0 430 L820.0 454 Z"/>
+  <rect class="kapak-sise" x="811.0" y="417" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="809.0" y="434" width="10" height="9"/>
+  <path class="ambalaj u1" d="M823.0 454 L823.0 438 Q823.0 434 826.0 433 L826.0 428 L832.0 428 L832.0 433 Q835.0 434 835.0 438 L835.0 454 Z"/>
+  <rect class="kapak-sise" x="826.0" y="425" width="6" height="4" rx="1"/>
+  <rect class="etiket s2p" x="824.0" y="442" width="10" height="9"/>
+  <rect class="fiyat s3" x="740" y="457" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="774" y="457" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="808" y="457" width="12" height="6" rx="1"/>
+  <rect class="raf" x="728" y="456" width="124" height="5" rx="1"/>
+  <rect class="kaide" x="724" y="468" width="132" height="14" rx="2"/>
+  <rect class="vurgu-cerceve" x="720" y="254" width="140" height="232" rx="6"/>
+</g>
+<g class="reyon" data-reyon="5" data-ad="Kişisel Bakım" data-icerik="Diş fırçası, diş macunu, şampuan" tabindex="0" role="button" aria-label="5. reyon: Kişisel Bakım">
+  <ellipse class="golge s3" cx="980" cy="486" rx="84.0" ry="10"/>
+  <path class="yan-yuz" d="M914 258 L851.2 252.4 L851.2 431.6 L914 482 Z"/>
+  <line class="yan-raf" x1="914" y1="306" x2="851.2" y2="290.8"/>
+  <line class="yan-raf" x1="914" y1="356" x2="851.2" y2="330.8"/>
+  <line class="yan-raf" x1="914" y1="406" x2="851.2" y2="370.8"/>
+  <line class="yan-raf" x1="914" y1="456" x2="851.2" y2="410.8"/>
+  <rect class="uc-yuz" x="914" y="258" width="132" height="224" rx="3"/>
+  <rect class="arka-panel" x="920" y="266" width="120" height="200"/>
+  <rect class="baslik-panel r5-renk" x="914" y="258" width="132" height="14" rx="3"/>
+  <rect class="ambalaj u2" x="923.0" y="292" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="926.0" y="295" width="9" height="6"/>
+  <rect class="ambalaj seffaf" x="951.0" y="268" width="10" height="36" rx="2"/>
+  <rect class="firca u4" x="955.0" y="272" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="954.2" y="272" width="4" height="6" rx="1"/>
+  <rect class="ambalaj u1" x="963.0" y="292" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="966.0" y="295" width="9" height="6"/>
+  <rect class="ambalaj u1" x="991.0" y="292" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="994.0" y="295" width="9" height="6"/>
+  <rect class="ambalaj u2" x="1019.0" y="292" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="1022.0" y="295" width="9" height="6"/>
+  <rect class="fiyat s3" x="930" y="307" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="964" y="307" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="998" y="307" width="12" height="6" rx="1"/>
+  <rect class="raf" x="918" y="306" width="124" height="5" rx="1"/>
+  <rect class="ambalaj u2" x="923.0" y="342" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="926.0" y="345" width="9" height="6"/>
+  <rect class="ambalaj seffaf" x="951.0" y="318" width="10" height="36" rx="2"/>
+  <rect class="firca u5" x="955.0" y="322" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="954.2" y="322" width="4" height="6" rx="1"/>
+  <rect class="ambalaj u2" x="963.0" y="342" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="966.0" y="345" width="9" height="6"/>
+  <rect class="ambalaj u1" x="991.0" y="342" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="994.0" y="345" width="9" height="6"/>
+  <rect class="ambalaj u1" x="1019.0" y="342" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="1022.0" y="345" width="9" height="6"/>
+  <rect class="fiyat s3" x="930" y="357" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="964" y="357" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="998" y="357" width="12" height="6" rx="1"/>
+  <rect class="raf" x="918" y="356" width="124" height="5" rx="1"/>
+  <rect class="ambalaj seffaf" x="923.0" y="368" width="10" height="36" rx="2"/>
+  <rect class="firca u1" x="927.0" y="372" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="926.2" y="372" width="4" height="6" rx="1"/>
+  <rect class="ambalaj seffaf" x="935.0" y="368" width="10" height="36" rx="2"/>
+  <rect class="firca u4" x="939.0" y="372" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="938.2" y="372" width="4" height="6" rx="1"/>
+  <rect class="ambalaj u2" x="947.0" y="392" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="950.0" y="395" width="9" height="6"/>
+  <rect class="ambalaj seffaf" x="975.0" y="368" width="10" height="36" rx="2"/>
+  <rect class="firca u1" x="979.0" y="372" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="978.2" y="372" width="4" height="6" rx="1"/>
+  <rect class="ambalaj seffaf" x="987.0" y="368" width="10" height="36" rx="2"/>
+  <rect class="firca u5" x="991.0" y="372" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="990.2" y="372" width="4" height="6" rx="1"/>
+  <rect class="ambalaj seffaf" x="999.0" y="368" width="10" height="36" rx="2"/>
+  <rect class="firca u4" x="1003.0" y="372" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="1002.2" y="372" width="4" height="6" rx="1"/>
+  <rect class="ambalaj u2" x="1011.0" y="392" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="1014.0" y="395" width="9" height="6"/>
+  <rect class="fiyat s3" x="930" y="407" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="964" y="407" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="998" y="407" width="12" height="6" rx="1"/>
+  <rect class="raf" x="918" y="406" width="124" height="5" rx="1"/>
+  <rect class="ambalaj seffaf" x="923.0" y="418" width="10" height="36" rx="2"/>
+  <rect class="firca u1" x="927.0" y="422" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="926.2" y="422" width="4" height="6" rx="1"/>
+  <rect class="ambalaj seffaf" x="935.0" y="418" width="10" height="36" rx="2"/>
+  <rect class="firca u4" x="939.0" y="422" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="938.2" y="422" width="4" height="6" rx="1"/>
+  <rect class="ambalaj seffaf" x="947.0" y="418" width="10" height="36" rx="2"/>
+  <rect class="firca u4" x="951.0" y="422" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="950.2" y="422" width="4" height="6" rx="1"/>
+  <rect class="ambalaj seffaf" x="959.0" y="418" width="10" height="36" rx="2"/>
+  <rect class="firca u3" x="963.0" y="422" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="962.2" y="422" width="4" height="6" rx="1"/>
+  <rect class="ambalaj seffaf" x="971.0" y="418" width="10" height="36" rx="2"/>
+  <rect class="firca u3" x="975.0" y="422" width="2.5" height="28" rx="1"/>
+  <rect class="firca-kil s2p" x="974.2" y="422" width="4" height="6" rx="1"/>
+  <rect class="ambalaj u2" x="983.0" y="442" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="986.0" y="445" width="9" height="6"/>
+  <rect class="ambalaj u1" x="1011.0" y="442" width="26" height="12" rx="1.5"/>
+  <rect class="etiket s2p" x="1014.0" y="445" width="9" height="6"/>
+  <rect class="fiyat s3" x="930" y="457" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="964" y="457" width="12" height="6" rx="1"/>
+  <rect class="fiyat s3" x="998" y="457" width="12" height="6" rx="1"/>
+  <rect class="raf" x="918" y="456" width="124" height="5" rx="1"/>
+  <rect class="kaide" x="914" y="468" width="132" height="14" rx="2"/>
+  <rect class="vurgu-cerceve" x="910" y="254" width="140" height="232" rx="6"/>
+</g>
+<!-- ASILI REYON TABELALARI -->
+<g class="asili-tabela" data-reyon="1">
+  <line class="ip" x1="170" y1="60" x2="170" y2="196"/>
+  <line class="ip" x1="270" y1="60" x2="270" y2="196"/>
+  <rect class="tabela r1-renk" x="140" y="196" width="160" height="40" rx="8"/>
+  <circle class="numara-zemin" cx="162" cy="216" r="13"/>
+  <text class="numara" x="162" y="221.5" text-anchor="middle">1</text>
+  <text class="tabela-ad" x="232" y="221" text-anchor="middle">Elektronik</text>
+</g>
+<g class="asili-tabela" data-reyon="2">
+  <line class="ip" x1="360" y1="60" x2="360" y2="196"/>
+  <line class="ip" x1="460" y1="60" x2="460" y2="196"/>
+  <rect class="tabela r2-renk" x="330" y="196" width="160" height="40" rx="8"/>
+  <circle class="numara-zemin" cx="352" cy="216" r="13"/>
+  <text class="numara" x="352" y="221.5" text-anchor="middle">2</text>
+  <text class="tabela-ad" x="422" y="221" text-anchor="middle">Gıda</text>
+</g>
+<g class="asili-tabela" data-reyon="3">
+  <line class="ip" x1="550" y1="60" x2="550" y2="196"/>
+  <line class="ip" x1="650" y1="60" x2="650" y2="196"/>
+  <rect class="tabela r3-renk" x="520" y="196" width="160" height="40" rx="8"/>
+  <circle class="numara-zemin" cx="542" cy="216" r="13"/>
+  <text class="numara" x="542" y="221.5" text-anchor="middle">3</text>
+  <text class="tabela-ad" x="612" y="221" text-anchor="middle">Ev ve Yağmur</text>
+</g>
+<g class="asili-tabela" data-reyon="4">
+  <line class="ip" x1="740" y1="60" x2="740" y2="196"/>
+  <line class="ip" x1="840" y1="60" x2="840" y2="196"/>
+  <rect class="tabela r4-renk" x="710" y="196" width="160" height="40" rx="8"/>
+  <circle class="numara-zemin" cx="732" cy="216" r="13"/>
+  <text class="numara" x="732" y="221.5" text-anchor="middle">4</text>
+  <text class="tabela-ad" x="802" y="221" text-anchor="middle">Temizlik</text>
+</g>
+<g class="asili-tabela" data-reyon="5">
+  <line class="ip" x1="930" y1="60" x2="930" y2="196"/>
+  <line class="ip" x1="1030" y1="60" x2="1030" y2="196"/>
+  <rect class="tabela r5-renk" x="900" y="196" width="160" height="40" rx="8"/>
+  <circle class="numara-zemin" cx="922" cy="216" r="13"/>
+  <text class="numara" x="922" y="221.5" text-anchor="middle">5</text>
+  <text class="tabela-ad" x="992" y="221" text-anchor="middle">Kişisel Bakım</text>
+</g>
+
+      <!-- REYONLARIN ÖNÜNDEKİ MÜŞTERİLER -->
+      <svg class="musteri-arka kalabalik" id="npc3" x="328.4" y="313.2" width="183.1" height="200.6" viewBox="-90 0 420 460" style="--kazak:#b06f7e;--kazak-koyu:#8f5563;--kot:#2f3a52;--sac-m:#c9a46a;--sac-m-acik:#dcbd86" aria-hidden="true">
+    <ellipse class="golge" cx="120" cy="442" rx="56" ry="6"/>
+    
+    <g class="bacak sol">
+      <path class="kot" d="M88 248 L120 248 L117 420 L92 420 Z"/>
+      <path class="kivrim s3" d="M100 300 L101 410"/>
+      <path class="ayakkabi-arka" d="M89 416 Q86 437 101 439 Q115 439 117 418 Z"/>
+      <path class="taban-arka s2p" d="M88 432 Q90 441 101 441 Q114 441 116.5 432 Z"/>
+    </g>
+    <g class="bacak sag">
+      <path class="kot" d="M 152 248 L 120 248 L 123 420 L 148 420 Z"/>
+      <path class="kivrim s3" d="M 140 300 L 139 410"/>
+      <path class="ayakkabi-arka" d="M 151 416 Q 154 437 139 439 Q 125 439 123 418 Z"/>
+      <path class="taban-arka s2p" d="M 152 432 Q 150 441 139 441 Q 126 441 123.5 432 Z"/>
+    </g>
+    <g class="ust-govde">
+      <rect class="ten-golge" x="109" y="88" width="22" height="30" rx="5"/>
+      <path class="kazak" d="M82 120 Q120 110 158 120 Q168 124 170 140 L168 258 Q120 266 72 258 L70 140 Q72 124 82 120 Z"/>
+      <path class="ribana" d="M71.5 248 Q120 256 168.5 248 L168 262 Q120 270 72 262 Z"/>
+      <path class="yaka-arka" d="M104 116 Q120 124 136 116 L134 112 Q120 118 106 112 Z"/>
+      <path class="kivrim s3" d="M120 126 L120 246"/>
+      
+      <g class="kol sol">
+        <line class="kol-kazak" x1="80" y1="130" x2="73" y2="204" stroke-width="18"/>
+        <circle class="kazak omuz" cx="80" cy="130" r="10.5"/>
+        <g class="onkol sol">
+          <line class="kol-kazak" x1="73" y1="204" x2="70" y2="262" stroke-width="15"/>
+          <line class="manset" x1="70.3" y1="258" x2="70" y2="266" stroke-width="15"/>
+          <g class="el sol">
+            <path class="ten" d="M63 266 Q60 284 65 292 Q70 298 76 293 Q80 284 77 266 Z"/>
+          </g>
+        </g>
+      </g>
+      <g class="kol sag">
+        <line class="kol-kazak" x1="160" y1="130" x2="167" y2="204" stroke-width="18"/>
+        <circle class="kazak omuz" cx="160" cy="130" r="10.5"/>
+        <g class="onkol sag">
+          <line class="kol-kazak" x1="167" y1="204" x2="170" y2="262" stroke-width="15"/>
+          <line class="manset" x1="169.7" y1="258" x2="170" y2="266" stroke-width="15"/>
+          <g class="el sag">
+            <path class="ten" d="M 177 266 Q 180 284 175 292 Q 170 298 164 293 Q 160 284 163 266 Z"/>
+          </g>
+        </g>
+      </g>
+      
+      <g class="kafa-salinim"><g class="kafa">
+        <ellipse class="ten-golge" cx="90"  cy="64" rx="5" ry="8"/>
+        <ellipse class="ten-golge" cx="150" cy="64" rx="5" ry="8"/>
+        <path class="sac-m" d="M88 58 Q86 14 120 12 Q154 14 152 58 L157 124 Q120 134 83 124 Z"/>
+      </g></g>
+    </g>
+  </svg><svg class="npc kalabalik" id="npc4" x="205.1" y="316.1" width="189.8" height="207.9" viewBox="-90 0 420 460" style="--gomlek:#e3c27f;--gomlek-acik:#f0d9a6;--gomlek-koyu:#c9a35e;--pantolon:#5a6b4a;--sac:#3a2a22;--sac-k:#3a2a22;--ten:#8a5a3c;--ten-golge:#6f4630;--ten-acik:#8a5a3c" aria-hidden="true">
+    <ellipse class="golge" cx="120" cy="443" rx="62" ry="6"/>
+    <path class="pantolon" d="M80 250 Q120 258 160 250 L158 420 L127 420 L120 296 L113 420 L82 420 Z"/>
+    
+    <path class="ayakkabi s1" d="M76 418 Q72 434 86 437 L114 437 Q119 428 112 418 Z"/>
+    <g class="s2p">
+      <path class="taban"    d="M70 432 Q69 441 79 441 L113 441 Q119 441 118 432 Z"/>
+      <path class="ayakkabi" d="M80 413 Q72 416 70.5 426 Q69.5 434 78 435 L113 435 Q118.5 434 117.5 427 Q116.5 417 111 413 Z"/>
+      <path class="dil-ayk s3" d="M86 414 Q92 412 100 414 L99 424 Q92 425 87 424 Z"/>
+      <path class="bagcik s3"  d="M85 418 L101 417"/>
+      <path class="bagcik s3"  d="M84.5 422 L101.5 421"/>
+      <ellipse class="parlama s3" cx="78" cy="428" rx="5" ry="2.2"/>
+      <path class="taban-cizgi s3" d="M71 436 L117 436"/>
+    </g>
+    <path class="ayakkabi s1" d="M 164 418 Q 168 434 154 437 L 126 437 Q 121 428 128 418 Z"/>
+    <g class="s2p">
+      <path class="taban"    d="M 170 432 Q 171 441 161 441 L 127 441 Q 121 441 122 432 Z"/>
+      <path class="ayakkabi" d="M 160 413 Q 168 416 169.5 426 Q 170.5 434 162 435 L 127 435 Q 121.5 434 122.5 427 Q 123.5 417 129 413 Z"/>
+      <path class="dil-ayk s3" d="M 154 414 Q 148 412 140 414 L 141 424 Q 148 425 153 424 Z"/>
+      <path class="bagcik s3"  d="M 155 418 L 139 417"/>
+      <path class="bagcik s3"  d="M 155.5 422 L 138.5 421"/>
+      <ellipse class="parlama s3" cx="162" cy="428" rx="5" ry="2.2"/>
+      <path class="taban-cizgi s3" d="M 169 436 L 123 436"/>
+    </g>
+    <g class="ust-govde">
+      <rect class="ten-golge" x="111" y="92" width="18" height="26" rx="4"/>
+      <path class="gomlek" d="M84 121 Q120 113 156 121 Q166 125 168 140 L161 196 Q164 226 166 256 Q120 262 74 256 Q76 226 79 196 L72 140 Q74 125 84 121 Z"/>
+      <path class="bisiklet-yaka" d="M106 116 Q120 128 134 116"/>
+      <path class="kivrim s3" d="M86 150 Q92 170 88 192"/>
+      <path class="kivrim s3" d="M154 150 Q148 170 152 192"/>
+      
+      <g class="kol sol">
+        <line class="kol-ten" x1="80" y1="130" x2="73" y2="204" stroke-width="15"/>
+        <path class="gomlek" d="M68.5 129 Q69 118 80 118 Q91.5 118 92 130 L88.5 172 L63.5 169.5 Z"/>
+        <path class="kivrim s3" d="M64.5 165.5 L88.8 168"/>
+        <circle class="gomlek omuz" cx="80" cy="130" r="12"/>
+        <g class="onkol sol">
+          <line class="kol-ten" x1="73" y1="204" x2="70" y2="268" stroke-width="13"/>
+          <g class="el sol">
+            <path class="sepet-sap-k" d="M52 300 Q70 278 88 300"/>
+            <path class="sepet-k" d="M44 300 L96 300 L90 330 L50 330 Z"/>
+            <path class="sepet-ag-k" d="M50 310 L90 310 M52 320 L88 320"/>
+            <line class="parmak" x1="70" y1="290" x2="70" y2="304"/>
+            <path class="ten" d="M63 266 Q60 284 65 292 Q70 298 76 293 Q80 284 77 266 Z"/>
+            <path class="ten-golge" d="M76 272 Q84 276 81 285 Q79 288 76 284 Z"/>
+            <path class="parmak-cizgi s3" d="M66 287 L66.5 293 M70 289 L70 295.5 M74 287 L73.5 293"/>
+          </g>
+        </g>
+      </g>
+      <g class="kol sag">
+        <line class="kol-ten" x1="160" y1="130" x2="167" y2="204" stroke-width="15"/>
+        <path class="gomlek" d="M 171.5 129 Q 171 118 160 118 Q 148.5 118 148 130 L 151.5 172 L 176.5 169.5 Z"/>
+        <path class="kivrim s3" d="M 175.5 165.5 L 151.2 168"/>
+        <circle class="gomlek omuz" cx="160" cy="130" r="12"/>
+        <g class="onkol sag">
+          <line class="kol-ten" x1="167" y1="204" x2="170" y2="268" stroke-width="13"/>
+          <g class="el sag">
+            
+            <path class="ten" d="M 177 266 Q 180 284 175 292 Q 170 298 164 293 Q 160 284 163 266 Z"/>
+            <path class="ten-golge" d="M 164 272 Q 156 276 159 285 Q 161 288 164 284 Z"/>
+            <path class="parmak-cizgi s3" d="M 174 287 L 173.5 293 M 170 289 L 170 295.5 M 166 287 L 166.5 293"/>
+          </g>
+        </g>
+      </g>
+      <g class="kafa-salinim"><g class="kafa">
+          <path class="sac-k" d="M84 62 Q78 12 120 10 Q162 12 156 62 L160 114 Q148 122 137 108 L136 90 L104 90 L103 108 Q92 122 80 114 Z"/>
+          <ellipse class="ten-golge" cx="91.5"  cy="66" rx="4.5" ry="7"/>
+          <ellipse class="ten-golge" cx="148.5" cy="66" rx="4.5" ry="7"/>
+          <circle class="kupe s2p" cx="91"  cy="74.5" r="1.7"/>
+          <circle class="kupe s2p" cx="149" cy="74.5" r="1.7"/>
+          <path class="yuz" d="M92 55 Q92 97 120 100.5 Q148 97 148 55 Q148 24 120 24 Q92 24 92 55 Z"/>
+          <path class="sac-k" d="M89 62 Q84 18 120 15 Q156 17 152 54 Q146 36 131 31 Q119 43 101 42 Q93 48 89 62 Z"/>
+          <path class="tel-k s3" d="M96 30 Q108 20 124 19"/>
+          <path class="tel-k s3" d="M156 70 Q157 90 158 108"/>
+          <path class="tel-k s3" d="M84 70 Q83 90 82 108"/>
+          <path class="kas ince-kas sol" d="M101 51.5 Q106 47.5 112.5 49.6"/>
+          <path class="kas ince-kas sag" d="M127.5 49.6 Q134 47.5 139 51.5"/>
+          
+          <g class="goz sol">
+            <g class="bakis s1"><circle class="bebek" cx="106" cy="60" r="2.8"/></g>
+            <path class="kirpik" d="M100 58.5 L98.2 56.8"/>
+            <g class="s2p">
+              <ellipse class="goz-aki" cx="106" cy="60" rx="5.5" ry="3.8"/>
+              <g class="bakis">
+                <circle class="iris"    cx="106"   cy="60" r="2.7"/>
+                <circle class="bebek"   cx="106"   cy="60" r="1.3"/>
+                <circle class="parilti" cx="107" cy="59" r=".7"/>
+              </g>
+              <path class="ince" style="stroke-width:1.9" d="M100 58.5 Q106 55 112 58.5"/>
+              <path class="kapak s3" d="M101 55.6 Q106 53 111 55.6"/>
+            </g>
+          </g>
+          
+          <g class="goz sag">
+            <g class="bakis s1"><circle class="bebek" cx="134" cy="60" r="2.8"/></g>
+            <path class="kirpik" d="M140 58.5 L141.8 56.8"/>
+            <g class="s2p">
+              <ellipse class="goz-aki" cx="134" cy="60" rx="5.5" ry="3.8"/>
+              <g class="bakis">
+                <circle class="iris"    cx="134"   cy="60" r="2.7"/>
+                <circle class="bebek"   cx="134"   cy="60" r="1.3"/>
+                <circle class="parilti" cx="135" cy="59" r=".7"/>
+              </g>
+              <path class="ince" style="stroke-width:1.9" d="M128 58.5 Q134 55 140 58.5"/>
+              <path class="kapak s3" d="M129 55.6 Q134 53 139 55.6"/>
+            </g>
+          </g>
+          
+          <path class="ince s12" d="M120 63 Q117 72 121 74"/>
+          <g class="s3">
+            <path class="burun-golge" d="M117.5 58 Q115.8 66 115.6 71.5"/>
+            <path class="burun-uc" d="M115.2 71.8 Q116.6 75.6 120 75.6 Q123.4 75.6 124.8 71.8"/>
+            <ellipse class="burun-delik" cx="117.4" cy="73.8" rx="1.3" ry=".8"/>
+            <ellipse class="burun-delik" cx="122.6" cy="73.8" rx="1.3" ry=".8"/>
+            <ellipse class="parlama" cx="120.6" cy="71.2" rx="1.5" ry="1"/>
+          </g>
+          <circle class="yanak" cx="103" cy="74" r="5"/>
+          <circle class="yanak" cx="137" cy="74" r="5"/>
+          
+          <g class="agiz">
+            <path class="ince gulumseme s12 agiz-cizgi" d="M113 83 Q120 88 127 83"/>
+            <g class="gulumseme s3">
+              <path class="dudak-ust" d="M113 83 Q116.5 80.6 120 81.6 Q123.5 80.6 127 83 Q120 84 113 83 Z"/>
+              <path class="dudak-alt" d="M113.6 83.4 Q120 88.8 126.4 83.4 Q120 84.6 113.6 83.4 Z"/>
+              <path class="ince" style="stroke-width:.9" d="M113.5 83 Q120 84.7 126.5 83"/>
+            </g>
+            <g class="acik-agiz">
+              <ellipse class="agiz-ici" cx="120" cy="84" rx="6.5" ry="4.5"/>
+              <ellipse class="dil"      cx="120" cy="86.6" rx="3.5" ry="1.6"/>
+              <rect    class="dis"      x="115" y="79.9" width="10" height="1.8" rx=".8"/>
+            </g>
+          </g></g></g>
+    </g>
+  </svg>
+      <!-- GÖREVLİ: arkadan ve önden iki çizim, dönerken biri diğerine geçer -->
+      <g class="gorevli-kap" id="gorevliKap" style="transform-origin:760px 420px">
+        <svg class="karakter-arka" id="gorevliArka" x="663.4" y="317.6" width="193.2" height="211.6" viewBox="-90 0 420 460" style="" aria-hidden="true">
+    <ellipse class="golge" cx="120" cy="443" rx="62" ry="6"/>
+    
+    <g class="bacak sol">
+      <path class="pantolon" d="M88 248 L120 248 L117 420 L92 420 Z"/>
+      <path class="kivrim s3" d="M100 300 L101 410"/>
+      <path class="ayakkabi" d="M89 416 Q86 437 101 439 Q115 439 117 418 Z"/>
+      <path class="taban-arka s2p" d="M88 432 Q90 441 101 441 Q114 441 116.5 432 Z"/>
+    </g>
+    <g class="bacak sag">
+      <path class="pantolon" d="M 152 248 L 120 248 L 123 420 L 148 420 Z"/>
+      <path class="kivrim s3" d="M 140 300 L 139 410"/>
+      <path class="ayakkabi" d="M 151 416 Q 154 437 139 439 Q 125 439 123 418 Z"/>
+      <path class="taban-arka s2p" d="M 152 432 Q 150 441 139 441 Q 126 441 123.5 432 Z"/>
+    </g>
+    <g class="ust-govde">
+      <rect class="ten-golge" x="111" y="88" width="18" height="30" rx="4"/>
+      <path class="gomlek" d="M82 120 Q120 110 158 120 Q168 124 170 140 L166 256 Q120 262 74 256 L70 140 Q72 124 82 120 Z"/>
+      <path class="yaka" d="M104 114 Q120 122 136 114 L136 120 Q120 128 104 120 Z"/>
+      <path class="kivrim s3" d="M100 140 Q104 170 98 200"/>
+      <path class="kivrim s3" d="M140 140 Q136 170 142 200"/>
+      <line class="aski" x1="74" y1="214" x2="166" y2="214"/>
+      <ellipse class="fiyonk" cx="113" cy="214" rx="7" ry="4.5"/>
+      <ellipse class="fiyonk" cx="127" cy="214" rx="7" ry="4.5"/>
+      <path class="aski" d="M118 216 L114 236 M122 216 L127 236"/>
+      
+      <g class="kol sol">
+        <line class="kol-ten" x1="80" y1="130" x2="73" y2="204" stroke-width="15"/>
+        <path class="gomlek" d="M68.5 129 Q69 118 80 118 Q91.5 118 92 130 L88.5 172 L63.5 169.5 Z"/>
+        <path class="kivrim s3" d="M64.5 165.5 L88.8 168"/>
+        <circle class="gomlek omuz" cx="80" cy="130" r="12"/>
+        <g class="onkol sol">
+          <line class="kol-ten" x1="73" y1="204" x2="70" y2="268" stroke-width="13"/>
+          <g class="el sol">
+            <line class="parmak" x1="70" y1="290" x2="70" y2="304"/>
+            <path class="ten" d="M63 266 Q60 284 65 292 Q70 298 76 293 Q80 284 77 266 Z"/>
+            <path class="ten-golge" d="M76 272 Q84 276 81 285 Q79 288 76 284 Z"/>
+            <path class="parmak-cizgi s3" d="M66 287 L66.5 293 M70 289 L70 295.5 M74 287 L73.5 293"/>
+          </g>
+        </g>
+      </g>
+      <g class="kol sag">
+        <line class="kol-ten" x1="160" y1="130" x2="167" y2="204" stroke-width="15"/>
+        <path class="gomlek" d="M 171.5 129 Q 171 118 160 118 Q 148.5 118 148 130 L 151.5 172 L 176.5 169.5 Z"/>
+        <path class="kivrim s3" d="M 175.5 165.5 L 151.2 168"/>
+        <circle class="gomlek omuz" cx="160" cy="130" r="12"/>
+        <g class="onkol sag">
+          <line class="kol-ten" x1="167" y1="204" x2="170" y2="268" stroke-width="13"/>
+          <g class="el sag">
+            
+            <path class="ten" d="M 177 266 Q 180 284 175 292 Q 170 298 164 293 Q 160 284 163 266 Z"/>
+            <path class="ten-golge" d="M 164 272 Q 156 276 159 285 Q 161 288 164 284 Z"/>
+            <path class="parmak-cizgi s3" d="M 174 287 L 173.5 293 M 170 289 L 170 295.5 M 166 287 L 166.5 293"/>
+          </g>
+        </g>
+      </g>
+      
+      <g class="kafa-salinim"><g class="kafa">
+        <ellipse class="ten-golge" cx="90"  cy="64" rx="5" ry="8"/>
+        <ellipse class="ten-golge" cx="150" cy="64" rx="5" ry="8"/>
+        <path class="sac" d="M90 58 Q88 18 120 15 Q152 18 150 58 Q150 92 120 97 Q90 92 90 58 Z"/>
+        <path class="tel-m s3" d="M104 26 Q112 50 108 80"/>
+        <path class="tel-m s3" d="M134 26 Q128 50 132 80"/>
+      </g></g>
+    </g>
+  </svg>
+        <svg class="karakter erkek" id="gorevli" x="663.4" y="317.6" width="193.2" height="211.6" viewBox="-90 0 420 460" data-durum="bekliyor" data-jest="" data-kirp="0" aria-hidden="true">
+    <ellipse class="golge" cx="120" cy="443" rx="62" ry="6"/>
+    <path class="pantolon" d="M76 250 Q120 258 164 250 L162 420 L128 420 L120 296 L112 420 L78 420 Z"/>
+    <path class="kivrim s3" d="M96 300 L96 418"/>
+    <path class="kivrim s3" d="M144 300 L144 418"/>
+    
+    <path class="ayakkabi s1" d="M76 418 Q72 434 86 437 L114 437 Q119 428 112 418 Z"/>
+    <g class="s2p">
+      <path class="taban"    d="M70 432 Q69 441 79 441 L113 441 Q119 441 118 432 Z"/>
+      <path class="ayakkabi" d="M80 413 Q72 416 70.5 426 Q69.5 434 78 435 L113 435 Q118.5 434 117.5 427 Q116.5 417 111 413 Z"/>
+      <path class="dil-ayk s3" d="M86 414 Q92 412 100 414 L99 424 Q92 425 87 424 Z"/>
+      <path class="bagcik s3"  d="M85 418 L101 417"/>
+      <path class="bagcik s3"  d="M84.5 422 L101.5 421"/>
+      <ellipse class="parlama s3" cx="78" cy="428" rx="5" ry="2.2"/>
+      <path class="taban-cizgi s3" d="M71 436 L117 436"/>
+    </g>
+    
+    <path class="ayakkabi s1" d="M 164 418 Q 168 434 154 437 L 126 437 Q 121 428 128 418 Z"/>
+    <g class="s2p">
+      <path class="taban"    d="M 170 432 Q 171 441 161 441 L 127 441 Q 121 441 122 432 Z"/>
+      <path class="ayakkabi" d="M 160 413 Q 168 416 169.5 426 Q 170.5 434 162 435 L 127 435 Q 121.5 434 122.5 427 Q 123.5 417 129 413 Z"/>
+      <path class="dil-ayk s3" d="M 154 414 Q 148 412 140 414 L 141 424 Q 148 425 153 424 Z"/>
+      <path class="bagcik s3"  d="M 155 418 L 139 417"/>
+      <path class="bagcik s3"  d="M 155.5 422 L 138.5 421"/>
+      <ellipse class="parlama s3" cx="162" cy="428" rx="5" ry="2.2"/>
+      <path class="taban-cizgi s3" d="M 169 436 L 123 436"/>
+    </g>
+
+    <g class="ust-govde">
+      <rect class="ten-golge" x="111" y="92" width="18" height="26" rx="4"/>
+      <ellipse class="cene-golge s3" cx="120" cy="101" rx="11" ry="4"/>
+      <path class="gomlek" d="M82 120 Q120 110 158 120 Q168 124 170 140 L166 256 Q120 262 74 256 L70 140 Q72 124 82 120 Z"/>
+      <path class="kivrim s3" d="M86 150 Q92 170 88 192"/>
+      <path class="kivrim s3" d="M154 150 Q148 170 152 192"/>
+      
+      <line class="aski s2p" x1="90" y1="178" x2="98" y2="121"/>
+      <line class="aski s2p" x1="150" y1="178" x2="142" y2="121"/>
+      <path class="onluk" d="M84 176 Q120 170 156 176 L162 330 Q120 336 78 330 Z"/>
+      <rect class="dikis s2p" x="100" y="238" width="40" height="26" rx="3"/>
+      <path class="kivrim s3" d="M104 280 Q102 305 106 328"/>
+      <path class="kivrim s3" d="M138 282 Q140 305 136 328"/>
+      <path class="yaka" d="M104 113 L120 127 L110 134 Z"/>
+      <path class="yaka" d="M136 113 L120 127 L130 134 Z"/>
+      <circle class="dugme s2p" cx="120" cy="138" r="1.6"/>
+      <circle class="dugme s2p" cx="120" cy="150" r="1.6"/>
+      <rect class="rozet" x="134" y="146" width="30" height="11" rx="2"/>
+      <text class="rozet-yazi" x="149" y="153.5" text-anchor="middle">Görevli</text>
+      
+      <g class="kol sol">
+        <line class="kol-ten" x1="80" y1="130" x2="73" y2="204" stroke-width="15"/>
+        <path class="gomlek" d="M68.5 129 Q69 118 80 118 Q91.5 118 92 130 L88.5 172 L63.5 169.5 Z"/>
+        <path class="kivrim s3" d="M64.5 165.5 L88.8 168"/>
+        <circle class="gomlek omuz" cx="80" cy="130" r="12"/>
+        <g class="onkol sol">
+          <line class="kol-ten" x1="73" y1="204" x2="70" y2="268" stroke-width="13"/>
+          <g class="el sol">
+            <line class="parmak" x1="70" y1="290" x2="70" y2="304"/>
+            <path class="ten" d="M63 266 Q60 284 65 292 Q70 298 76 293 Q80 284 77 266 Z"/>
+            <path class="ten-golge" d="M76 272 Q84 276 81 285 Q79 288 76 284 Z"/>
+            <path class="parmak-cizgi s3" d="M66 287 L66.5 293 M70 289 L70 295.5 M74 287 L73.5 293"/>
+          </g>
+        </g>
+      </g>
+      
+      <g class="kol sag">
+        <line class="kol-ten" x1="160" y1="130" x2="167" y2="204" stroke-width="15"/>
+        <path class="gomlek" d="M 171.5 129 Q 171 118 160 118 Q 148.5 118 148 130 L 151.5 172 L 176.5 169.5 Z"/>
+        <path class="kivrim s3" d="M 175.5 165.5 L 151.2 168"/>
+        <circle class="gomlek omuz" cx="160" cy="130" r="12"/>
+        <g class="onkol sag">
+          <line class="kol-ten" x1="167" y1="204" x2="170" y2="268" stroke-width="13"/>
+          <g class="el sag">
+            <line class="parmak parmak-sag" x1="170" y1="290" x2="170" y2="304"/>
+            
+            <path class="ten" d="M 177 266 Q 180 284 175 292 Q 170 298 164 293 Q 160 284 163 266 Z"/>
+            <path class="ten-golge" d="M 164 272 Q 156 276 159 285 Q 161 288 164 284 Z"/>
+            <path class="parmak-cizgi s3" d="M 174 287 L 173.5 293 M 170 289 L 170 295.5 M 166 287 L 166.5 293"/>
+          </g>
+        </g>
+      </g>
+
+      <g class="kafa-salinim">
+        <g class="kafa">
+          <ellipse class="ten-golge" cx="90"  cy="66" rx="5" ry="8"/>
+          <ellipse class="ten-golge" cx="150" cy="66" rx="5" ry="8"/>
+          <path class="yuz" d="M90 55 Q90 100 120 102 Q150 100 150 55 Q150 22 120 22 Q90 22 90 55 Z"/>
+          <path class="sac" d="M88 60 Q82 18 120 13 Q158 14 153 58 Q151 42 142 34 Q128 42 104 37 Q94 42 92 60 Z"/>
+          <path class="tel s3" d="M98 24 Q110 17 126 20"/>
+          <path class="tel s3" d="M132 22 Q145 27 149 42"/>
+          <path class="kas sol" d="M100 51 Q106 47 113 50"/>
+          <path class="kas sag" d="M127 50 Q134 47 140 51"/>
+          
+          <g class="goz sol">
+            <g class="bakis s1"><circle class="bebek" cx="106" cy="60" r="2.8"/></g>
+            
+            <g class="s2p">
+              <ellipse class="goz-aki" cx="106" cy="60" rx="5.5" ry="3.8"/>
+              <g class="bakis">
+                <circle class="iris"    cx="106"   cy="60" r="2.7"/>
+                <circle class="bebek"   cx="106"   cy="60" r="1.3"/>
+                <circle class="parilti" cx="107" cy="59" r=".7"/>
+              </g>
+              <path class="ince" style="stroke-width:1.4" d="M100 58.5 Q106 55 112 58.5"/>
+              <path class="kapak s3" d="M101 55.6 Q106 53 111 55.6"/>
+            </g>
+          </g>
+          
+          <g class="goz sag">
+            <g class="bakis s1"><circle class="bebek" cx="134" cy="60" r="2.8"/></g>
+            
+            <g class="s2p">
+              <ellipse class="goz-aki" cx="134" cy="60" rx="5.5" ry="3.8"/>
+              <g class="bakis">
+                <circle class="iris"    cx="134"   cy="60" r="2.7"/>
+                <circle class="bebek"   cx="134"   cy="60" r="1.3"/>
+                <circle class="parilti" cx="135" cy="59" r=".7"/>
+              </g>
+              <path class="ince" style="stroke-width:1.4" d="M128 58.5 Q134 55 140 58.5"/>
+              <path class="kapak s3" d="M129 55.6 Q134 53 139 55.6"/>
+            </g>
+          </g>
+          
+          <path class="ince s12" d="M120 63 Q117 72 121 74"/>
+          <g class="s3">
+            <path class="burun-golge" d="M117.5 58 Q115.8 66 115.6 71.5"/>
+            <path class="burun-uc" d="M115.2 71.8 Q116.6 75.6 120 75.6 Q123.4 75.6 124.8 71.8"/>
+            <ellipse class="burun-delik" cx="117.4" cy="73.8" rx="1.3" ry=".8"/>
+            <ellipse class="burun-delik" cx="122.6" cy="73.8" rx="1.3" ry=".8"/>
+            <ellipse class="parlama" cx="120.6" cy="71.2" rx="1.5" ry="1"/>
+          </g>
+          <circle class="yanak" cx="103" cy="74" r="5"/>
+          <circle class="yanak" cx="137" cy="74" r="5"/>
+          
+          <g class="agiz">
+            <path class="ince gulumseme s12 agiz-cizgi" d="M113 83 Q120 88 127 83"/>
+            <g class="gulumseme s3">
+              <path class="dudak-ust" d="M113.5 83 Q116.5 81.3 120 82 Q123.5 81.3 126.5 83 Q120 84 113.5 83 Z"/>
+              <path class="dudak-alt" d="M114 83.4 Q120 87.6 126 83.4 Q120 84.6 114 83.4 Z"/>
+              <path class="ince" style="stroke-width:.9" d="M113.5 83 Q120 84.7 126.5 83"/>
+            </g>
+            <g class="acik-agiz">
+              <ellipse class="agiz-ici" cx="120" cy="84" rx="6.5" ry="4.5"/>
+              <ellipse class="dil"      cx="120" cy="86.6" rx="3.5" ry="1.6"/>
+              <rect    class="dis"      x="115" y="79.9" width="10" height="1.8" rx=".8"/>
+            </g>
+          </g>
+        </g>
+      </g>
+
+      <g class="noktalar">
+        <circle class="nokta" cx="160" cy="16" r="3.5"/>
+        <circle class="nokta" cx="171" cy="16" r="3.5"/>
+        <circle class="nokta" cx="182" cy="16" r="3.5"/>
+      </g>
+    </g>
+  </svg>
+      </g>
+      <!-- GÖREVLİYLE KONUŞAN MÜŞTERİ (sadece "başka müşteriyle konuşuyor" modunda) -->
+      <g class="sohbet-kap" id="sohbetKap"><svg class="musteri-arka" id="sohbetci" x="590.0" y="320.6" width="199.9" height="219.0" viewBox="-90 0 420 460" style="--kazak:#8a5a7a;--kazak-koyu:#6f4562;--kot:#3b3f47;--sac-m:#5a4636;--sac-m-acik:#7a604a" aria-hidden="true">
+    <ellipse class="golge" cx="120" cy="442" rx="56" ry="6"/>
+    
+    <g class="bacak sol">
+      <path class="kot" d="M88 248 L120 248 L117 420 L92 420 Z"/>
+      <path class="kivrim s3" d="M100 300 L101 410"/>
+      <path class="ayakkabi-arka" d="M89 416 Q86 437 101 439 Q115 439 117 418 Z"/>
+      <path class="taban-arka s2p" d="M88 432 Q90 441 101 441 Q114 441 116.5 432 Z"/>
+    </g>
+    <g class="bacak sag">
+      <path class="kot" d="M 152 248 L 120 248 L 123 420 L 148 420 Z"/>
+      <path class="kivrim s3" d="M 140 300 L 139 410"/>
+      <path class="ayakkabi-arka" d="M 151 416 Q 154 437 139 439 Q 125 439 123 418 Z"/>
+      <path class="taban-arka s2p" d="M 152 432 Q 150 441 139 441 Q 126 441 123.5 432 Z"/>
+    </g>
+    <g class="ust-govde">
+      <rect class="ten-golge" x="109" y="88" width="22" height="30" rx="5"/>
+      <path class="kazak" d="M82 120 Q120 110 158 120 Q168 124 170 140 L168 258 Q120 266 72 258 L70 140 Q72 124 82 120 Z"/>
+      <path class="ribana" d="M71.5 248 Q120 256 168.5 248 L168 262 Q120 270 72 262 Z"/>
+      <path class="yaka-arka" d="M104 116 Q120 124 136 116 L134 112 Q120 118 106 112 Z"/>
+      <path class="kivrim s3" d="M120 126 L120 246"/>
+      
+      <g class="kol sol">
+        <line class="kol-kazak" x1="80" y1="130" x2="73" y2="204" stroke-width="18"/>
+        <circle class="kazak omuz" cx="80" cy="130" r="10.5"/>
+        <g class="onkol sol">
+          <line class="kol-kazak" x1="73" y1="204" x2="70" y2="262" stroke-width="15"/>
+          <line class="manset" x1="70.3" y1="258" x2="70" y2="266" stroke-width="15"/>
+          <g class="el sol">
+            <path class="ten" d="M63 266 Q60 284 65 292 Q70 298 76 293 Q80 284 77 266 Z"/>
+          </g>
+        </g>
+      </g>
+      <g class="kol sag">
+        <line class="kol-kazak" x1="160" y1="130" x2="167" y2="204" stroke-width="18"/>
+        <circle class="kazak omuz" cx="160" cy="130" r="10.5"/>
+        <g class="onkol sag">
+          <line class="kol-kazak" x1="167" y1="204" x2="170" y2="262" stroke-width="15"/>
+          <line class="manset" x1="169.7" y1="258" x2="170" y2="266" stroke-width="15"/>
+          <g class="el sag">
+            <path class="ten" d="M 177 266 Q 180 284 175 292 Q 170 298 164 293 Q 160 284 163 266 Z"/>
+          </g>
+        </g>
+      </g>
+      
+      <g class="kafa-salinim"><g class="kafa">
+        <ellipse class="ten-golge" cx="90"  cy="64" rx="5" ry="8"/>
+        <ellipse class="ten-golge" cx="150" cy="64" rx="5" ry="8"/>
+        <path class="sac-m" d="M90 58 Q88 18 120 15 Q152 18 150 58 Q150 92 120 97 Q90 92 90 58 Z"/>
+        <path class="tel-m s3" d="M104 26 Q112 50 108 80"/>
+        <path class="tel-m s3" d="M134 26 Q128 50 132 80"/>
+      </g></g>
+    </g>
+  </svg></g>
+      <!-- ÜRÜN VURGUSU (rafta aranan ürünün yeri) -->
+      <rect class="urun-vurgu" id="urunVurgu" x="0" y="0" width="0" height="0" rx="6"/>
+<!-- ÖN PLAN: KASA -->
+<g class="kasa">
+  <ellipse class="golge s3" cx="130" cy="636" rx="150" ry="10"/>
+  <rect class="kasa-govde" x="0" y="540" width="270" height="96" rx="6"/>
+  <rect class="kasa-ust" x="-4" y="530" width="278" height="14" rx="4"/>
+  <rect class="bant" x="10" y="533" width="170" height="8" rx="3"/>
+  <g class="s2p">
+    <line class="bant-cizgi" x1="16" y1="533" x2="16" y2="541"/>
+    <line class="bant-cizgi" x1="28" y1="533" x2="28" y2="541"/>
+    <line class="bant-cizgi" x1="40" y1="533" x2="40" y2="541"/>
+    <line class="bant-cizgi" x1="52" y1="533" x2="52" y2="541"/>
+    <line class="bant-cizgi" x1="64" y1="533" x2="64" y2="541"/>
+    <line class="bant-cizgi" x1="76" y1="533" x2="76" y2="541"/>
+    <line class="bant-cizgi" x1="88" y1="533" x2="88" y2="541"/>
+    <line class="bant-cizgi" x1="100" y1="533" x2="100" y2="541"/>
+    <line class="bant-cizgi" x1="112" y1="533" x2="112" y2="541"/>
+    <line class="bant-cizgi" x1="124" y1="533" x2="124" y2="541"/>
+    <line class="bant-cizgi" x1="136" y1="533" x2="136" y2="541"/>
+    <line class="bant-cizgi" x1="148" y1="533" x2="148" y2="541"/>
+    <line class="bant-cizgi" x1="160" y1="533" x2="160" y2="541"/>
+    <line class="bant-cizgi" x1="172" y1="533" x2="172" y2="541"/>
+  </g>
+  <rect class="direk" x="227" y="512" width="6" height="20"/>
+  <rect class="ekran" x="204" y="490" width="52" height="28" rx="3"/>
+  <rect class="ekran-ic" x="208" y="494" width="44" height="18" rx="2"/>
+  <rect class="tabela-zemin" x="12" y="560" width="70" height="22" rx="4"/>
+  <text class="kucuk-tabela acik" x="47" y="575" text-anchor="middle">KASA 1</text>
+  <rect class="kasa-panel s2p" x="100" y="556" width="150" height="64" rx="4"/>
+</g>
+<!-- ÖN PLAN: SEPETLER VE BİTKİ -->
+<g class="sepetler">
+  <ellipse class="golge s3" cx="1080" cy="632" rx="70" ry="8"/>
+  <path class="sepet" d="M1030 600 L1130 600 L1120 630 L1040 630 Z"/>
+  <path class="sepet-ag s2p" d="M1045 608 L1115 608 M1048 616 L1112 616"/>
+  <path class="sepet-sap" d="M1052 600 Q1080 586 1108 600"/>
+  <path class="sepet" d="M1030 584 L1130 584 L1120 614 L1040 614 Z"/>
+  <path class="sepet-ag s2p" d="M1045 592 L1115 592 M1048 600 L1112 600"/>
+  <path class="sepet-sap" d="M1052 584 Q1080 570 1108 584"/>
+  <path class="sepet" d="M1030 568 L1130 568 L1120 598 L1040 598 Z"/>
+  <path class="sepet-ag s2p" d="M1045 576 L1115 576 M1048 584 L1112 584"/>
+  <path class="sepet-sap" d="M1052 568 Q1080 554 1108 568"/>
+  <path class="sepet" d="M1030 552 L1130 552 L1120 582 L1040 582 Z"/>
+  <path class="sepet-ag s2p" d="M1045 560 L1115 560 M1048 568 L1112 568"/>
+  <path class="sepet-sap" d="M1052 552 Q1080 538 1108 552"/>
+</g>
+<g class="bitki">
+  <ellipse class="golge s3" cx="1170" cy="634" rx="30" ry="6"/>
+  <path class="yaprak" d="M1170 590 Q1140 560 1150 520 Q1168 550 1170 590 Z"/>
+  <path class="yaprak koyu" d="M1170 590 Q1196 556 1192 512 Q1176 548 1170 590 Z"/>
+  <path class="yaprak" d="M1170 590 Q1160 540 1176 500 Q1184 548 1170 590 Z"/>
+  <path class="saksi" d="M1150 588 L1190 588 L1184 634 L1156 634 Z"/>
+</g>
+    </g>
+    <!-- MÜŞTERİ (kullanıcının avatarı, kameraya yakın) -->
+    <g class="musteri-konum" id="musteriKonum">
+  <svg class="musteri" id="musteri" x="-210" y="-440" width="420" height="460" viewBox="-90 0 420 460" aria-hidden="true">
+    <ellipse class="golge" cx="120" cy="442" rx="56" ry="6"/>
+    
+    <g class="bacak sol">
+      <path class="kot" d="M88 248 L120 248 L117 420 L92 420 Z"/>
+      <path class="kivrim s3" d="M100 300 L101 410"/>
+      <path class="ayakkabi-arka" d="M89 416 Q86 437 101 439 Q115 439 117 418 Z"/>
+      <path class="taban-arka s2p" d="M88 432 Q90 441 101 441 Q114 441 116.5 432 Z"/>
+    </g>
+    <g class="bacak sag">
+      <path class="kot" d="M 152 248 L 120 248 L 123 420 L 148 420 Z"/>
+      <path class="kivrim s3" d="M 140 300 L 139 410"/>
+      <path class="ayakkabi-arka" d="M 151 416 Q 154 437 139 439 Q 125 439 123 418 Z"/>
+      <path class="taban-arka s2p" d="M 152 432 Q 150 441 139 441 Q 126 441 123.5 432 Z"/>
+    </g>
+    <g class="ust-govde">
+      <rect class="ten-golge" x="109" y="88" width="22" height="30" rx="5"/>
+      <path class="kazak" d="M82 120 Q120 110 158 120 Q168 124 170 140 L168 258 Q120 266 72 258 L70 140 Q72 124 82 120 Z"/>
+      <path class="ribana" d="M71.5 248 Q120 256 168.5 248 L168 262 Q120 270 72 262 Z"/>
+      <path class="yaka-arka" d="M104 116 Q120 124 136 116 L134 112 Q120 118 106 112 Z"/>
+      <path class="kivrim s3" d="M120 126 L120 246"/>
+      
+      <g class="kol sol">
+        <line class="kol-kazak" x1="80" y1="130" x2="73" y2="204" stroke-width="18"/>
+        <circle class="kazak omuz" cx="80" cy="130" r="10.5"/>
+        <g class="onkol sol">
+          <line class="kol-kazak" x1="73" y1="204" x2="70" y2="262" stroke-width="15"/>
+          <line class="manset" x1="70.3" y1="258" x2="70" y2="266" stroke-width="15"/>
+          <g class="el sol">
+            <path class="ten" d="M63 266 Q60 284 65 292 Q70 298 76 293 Q80 284 77 266 Z"/>
+          </g>
+        </g>
+      </g>
+      <g class="kol sag">
+        <line class="kol-kazak" x1="160" y1="130" x2="167" y2="204" stroke-width="18"/>
+        <circle class="kazak omuz" cx="160" cy="130" r="10.5"/>
+        <g class="onkol sag">
+          <line class="kol-kazak" x1="167" y1="204" x2="170" y2="262" stroke-width="15"/>
+          <line class="manset" x1="169.7" y1="258" x2="170" y2="266" stroke-width="15"/>
+          <g class="el sag">
+            <path class="ten" d="M 177 266 Q 180 284 175 292 Q 170 298 164 293 Q 160 284 163 266 Z"/>
+          </g>
+        </g>
+      </g>
+      
+      <g class="kafa-salinim"><g class="kafa">
+        <ellipse class="ten-golge" cx="90"  cy="64" rx="5" ry="8"/>
+        <ellipse class="ten-golge" cx="150" cy="64" rx="5" ry="8"/>
+        <path class="sac-m" d="M90 58 Q88 18 120 15 Q152 18 150 58 Q150 92 120 97 Q90 92 90 58 Z"/>
+        <path class="tel-m s3" d="M104 26 Q112 50 108 80"/>
+        <path class="tel-m s3" d="M134 26 Q128 50 132 80"/>
+      </g></g>
+    </g>
+  </svg>
+    </g>
+    <rect class="perde" id="perde" x="0" y="0" width="1200" height="640"/>
+    </svg>
+    <!-- Rehber: o anki adımın kısa açıklaması. Hiçbir zaman "yanlış" demez. -->
+    <div class="rehber">
+      <p class="adim" id="adim" aria-live="polite"></p>
+    </div>
+    <div class="altyazi" id="altyazi" aria-live="polite"></div>
+
+    <!-- Başlangıç: ürün seçimi ve görev kartı -->
+    <div class="kaplama acik" id="secimEkrani">
+      <div class="kutu-panel" id="secimPanel">
+        <h2>Bugün marketten ne almak istiyorsun?</h2>
+        <div class="urun-kartlari" id="urunKartlari"></div>
+      </div>
+      <div class="kutu-panel" id="gorevPanel" hidden>
+        <h2>Görevin</h2>
+        <p id="gorevMetni"></p>
+        <div class="ust-satir">
+          <button class="ana-buton" id="girBtn">Markete gir</button>
+          <button class="cip" id="degistirBtn">Başka ürün seç</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bitiş özeti: puan yok, sadece yapılanların listesi -->
+    <div class="kaplama" id="bitisEkrani">
+      <div class="kutu-panel">
+        <h2>Görev tamamlandı</h2>
+        <ul class="ozet" id="ozet"></ul>
+        <div class="ust-satir">
+          <button class="ana-buton" id="tekrarBtn">Aynı ürünle tekrar</button>
+          <button class="cip" id="yeniUrunBtn">Başka ürün seç</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="ipucu" id="ipucu" aria-live="polite"></p>
+  <div class="bekleme" id="bekleme"><i></i></div>
+  <p class="mesgul-notu" id="mesgulNotu" hidden>Görevli şu an meşgul.</p>
+  <button class="ana-buton" id="hareketBtn" hidden></button>
+
+  <div class="panel" id="panel">
+    <!-- Ses yanlış duyulduysa: kullanıcının hatası değil, arayüz düzeltme önerir -->
+    <div class="duzeltme" id="duzeltme" hidden>
+      <p id="duzeltmeMetni"></p>
+      <div class="cipler">
+        <button class="cip" id="duzeltmeEvet">Evet, bunu demek istedim</button>
+        <button class="cip" id="duzeltmeHayir">Hayır, tekrar söyleyeceğim</button>
+      </div>
+    </div>
+    <div class="cipler" id="oneriler"></div>
+    <div class="cipler" id="onarimlar"></div>
+    <div class="giris">
+      <button class="mikrofon" id="mikrofon" aria-label="Basılı tutup konuş" title="Basılı tutup konuş">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <input id="girdi" placeholder="ya da kendin yaz…" aria-label="Görevliye söyleyeceğin" autocomplete="off">
+      <button class="ana-buton" id="gonder">Söyle</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/uygulama.js"></script>
+</body>
+</html>

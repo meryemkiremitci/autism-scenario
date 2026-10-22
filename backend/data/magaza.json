@@ -1,0 +1,73 @@
+{
+  "_aciklama": "Mağaza senaryosunun bütün içeriği. Yeni ürün, yer ya da cümle eklemek için kod değiştirmek gerekmez; sadece bu dosya düzenlenir.",
+
+  "urunler": [
+    { "id": "sut",      "ad": "süt",         "istenen": "1 litrelik süt",               "alternatif": "yarım litrelik süt",             "yalin": "süt",               "yer": "bz", "gelis": "yarın sabah",         "ikon": "sut" },
+    { "id": "semsiye",  "ad": "şemsiye",     "istenen": "büyük şemsiye",                "alternatif": "katlanır şemsiye",               "yalin": "şemsiye",           "yer": "r3", "gelis": "hafta sonu",          "ikon": "semsiye" },
+    { "id": "pil",      "ad": "pil",         "istenen": "4'lü AA pil",                  "alternatif": "2'li AA pil",                    "yalin": "AA pil",            "yer": "r1", "gelis": "yarın öğleden sonra", "ikon": "pil" },
+    { "id": "deterjan", "ad": "deterjan",    "istenen": "3 litrelik çamaşır deterjanı", "alternatif": "1,5 litrelik çamaşır deterjanı", "yalin": "çamaşır deterjanı", "yer": "r4", "gelis": "pazartesi",           "ikon": "deterjan" },
+    { "id": "firca",    "ad": "diş fırçası", "istenen": "yumuşak diş fırçası",          "alternatif": "orta sert diş fırçası",          "yalin": "diş fırçası",       "yer": "r5", "gelis": "yarın sabah",         "ikon": "firca" }
+  ],
+
+  "yerler": {
+    "r1": { "ad": "1. reyon",     "cumle": "birinci reyonda, şu tarafta",        "jest": "isaret" },
+    "r2": { "ad": "2. reyon",     "cumle": "ikinci reyonda, şu tarafta",         "jest": "isaret" },
+    "r3": { "ad": "3. reyon",     "cumle": "üçüncü reyonda, şu tarafta",         "jest": "isaret" },
+    "r4": { "ad": "4. reyon",     "cumle": "hemen arkamdaki dördüncü reyonda",   "jest": "anlat" },
+    "r5": { "ad": "5. reyon",     "cumle": "beşinci reyonda, şu tarafta",        "jest": "isaret-sag" },
+    "bz": { "ad": "buzdolapları", "cumle": "arkadaki buzdolaplarında, en solda", "jest": "isaret" }
+  },
+
+  "_kategoriler_aciklama": "Görev dışı bir ürün sorulursa görevli yalnızca bu listeden yer söyleyebilir. Listede olmayan bir şey için yer uydurmaz.",
+  "kategoriler": {
+    "elektronik": "r1", "pil": "r1", "ampul": "r1", "kulaklık": "r1", "şarj": "r1",
+    "gıda": "r2", "makarna": "r2", "konserve": "r2", "ekmek": "r2", "kahvaltılık": "r2", "pirinç": "r2",
+    "şemsiye": "r3", "yağmurluk": "r3", "mutfak": "r3", "tabak": "r3", "bardak": "r3",
+    "deterjan": "r4", "sabun": "r4", "temizlik": "r4", "çöp torbası": "r4", "bez": "r4",
+    "diş": "r5", "şampuan": "r5", "krem": "r5", "peçete": "r5",
+    "süt": "bz", "ayran": "bz", "su": "bz", "içecek": "bz", "meyve suyu": "bz", "dondurma": "bz", "yoğurt": "bz"
+  },
+
+  "_sablonlar_aciklama": "Her eylem için görevlinin cümleleri. Hazır cümle yolunda her zaman İLK şablon kullanılır (öğrenme için sabit). Süslü parantezler oyun bilgileriyle doldurulur; büyük harfle başlayan yer tutucu, değeri büyük harfle başlatır.",
+  "sablonlar": {
+    "karsila":                ["Merhaba, hoş geldiniz. Nasıl yardımcı olabilirim?", "Merhaba, buyurun?", "Hoş geldiniz, bir şey mi arıyordunuz?"],
+    "karsila_kisa":           ["Merhaba!"],
+    "kendiliginden_sor":      ["Merhaba, yardımcı olabilir miyim?"],
+    "bir_saniye_de":          ["Bir saniye, hemen ilgileniyorum."],
+    "ozur_buyurun":           ["Kusura bakmayın, buyurun. Nasıl yardımcı olabilirim?"],
+    "bekleyen_hatirla":       ["Kusura bakmayın, {ad} arıyordunuz, değil mi?"],
+    "tekrar_sor":             ["Peki, ne arıyordunuz?"],
+    "yer_tarif_et":           ["{Esya} {yer}."],
+    "boyut_yok_bildir":       ["Maalesef {istenen} kalmadı, bugün hepsi satıldı."],
+    "hic_yok_bildir":         ["Maalesef {ad} şu an hiç kalmadı."],
+    "alternatif_onayla":      ["Evet, {alternatif} var, {yer}."],
+    "gelis_zamani_soyle":     ["{Gelis} gelmesini bekliyoruz."],
+    "baska_urun_yeri":        ["{Esya} {yer}."],
+    "baska_urun_bilinmiyor":  ["Maalesef onu tam bilemiyorum, kasadaki arkadaşımıza sorabilirsiniz."],
+    "konu_disi":              ["Anlıyorum. Size nasıl yardımcı olabilirim?"],
+    "netlestir":              ["{Tahmin} mı arıyorsunuz?"],
+    "anlayamadim":            ["Pardon, tam anlayamadım?"],
+    "acele_etmeyin":          ["Tabii, acele etmeyin."],
+    "vedalas":                ["Rica ederim, iyi alışverişler!"],
+    "vedalas_kisa":           ["İyi günler!"],
+    "vedalas_urunsuz":        ["Rica ederim, iyi günler."],
+    "diger_musteri_tesekkur": ["Tamam, çok teşekkürler!"]
+  },
+
+  "_hazir_cumleler_aciklama": "Her adımda kullanıcıya sunulan hazır cümleler. Her biri niyetini taşır, bu yüzden LLM'e gitmez. Sadece kibar ve açık cümleler: bunlar örnek dil işlevi görür.",
+  "hazir_cumleler": {
+    "seslen":   [ { "metin": "Pardon, bakar mısınız?", "niyet": "selam" }, { "metin": "Merhaba", "niyet": "selam" } ],
+    "urun":     [ { "metin": "{Istenen} arıyorum.", "niyet": "urun_sor" }, { "metin": "{Istenen} nerede bulabilirim?", "niyet": "urun_sor" } ],
+    "boyut":    [ { "metin": "{Alternatif} var mı?", "niyet": "alternatif_sor" }, { "metin": "Başka bir boyutu var mı?", "niyet": "alternatif_sor" }, { "metin": "Tamam, teşekkürler.", "niyet": "ayril" } ],
+    "gelis":    [ { "metin": "Ne zaman gelir?", "niyet": "gelis_sor" }, { "metin": "Tamam, teşekkürler.", "niyet": "ayril" } ],
+    "tesekkur": [ { "metin": "Teşekkür ederim.", "niyet": "tesekkur" }, { "metin": "Sağ olun.", "niyet": "tesekkur" } ],
+    "onay":     [ { "metin": "Evet.", "niyet": "evet" }, { "metin": "Hayır.", "niyet": "hayir" } ]
+  },
+
+  "_zorluklar_aciklama": "Zorluk yalnızca hazır bir ayar paketidir. Listelerden biri oturum başında kodda rastgele seçilir; LLM bunlara hiç karışmaz.",
+  "zorluklar": {
+    "kolay": { "gorevli": ["bos"],    "stok": ["var"],                 "boyut_acik": false, "hafiza": ["hatirla"],         "bekleme_saniye": 6, "dil_duzeyi": "sade",     "sessizlik_saniye": 8 },
+    "orta":  { "gorevli": ["raf"],    "stok": ["var", "yok"],          "boyut_acik": false, "hafiza": ["hatirla"],         "bekleme_saniye": 6, "dil_duzeyi": "sade",     "sessizlik_saniye": 15 },
+    "zor":   { "gorevli": ["sohbet"], "stok": ["var", "boyut", "yok"], "boyut_acik": true,  "hafiza": ["hatirla", "unut"], "bekleme_saniye": 8, "dil_duzeyi": "gundelik", "sessizlik_saniye": 15 }
+  }
+}

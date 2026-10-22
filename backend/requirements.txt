@@ -1,0 +1,9 @@
+# Sunucu
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+httpx>=0.27            # LLM API çağrıları için
+python-multipart>=0.0.9  # /api/stt ses dosyası yüklemesi için
+
+# Testler
+pytest>=8.0
