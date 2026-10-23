@@ -33,14 +33,19 @@
 
   /* Rehber: sahnenin sağ üst köşesinde, yüzey renginde yumuşak bir kart (altyazı altta) */
   .rehber {
-    position: absolute; right: 12px; top: 12px;
-    width: max-content; max-width: min(360px, calc(100% - 24px));
-    padding: 10px 16px; border-radius: 14px; border-left: 4px solid var(--vurgu);
-    background: color-mix(in srgb, var(--yuzey) 92%, transparent);
-    box-shadow: 0 2px 10px rgba(16, 22, 26, .18); pointer-events: none;
+    position: absolute; right: 14px; top: 14px;
+    width: max-content; max-width: min(400px, calc(100% - 28px));
+    padding: 12px 18px 14px; border-radius: 16px;
+    background: var(--yuzey); border: 2px solid var(--vurgu);
+    box-shadow: 0 4px 16px rgba(16, 22, 26, .3); pointer-events: none;
   }
   .rehber:has(.adim:empty) { display: none; }
-  .adim { margin: 0; font-weight: 700; color: var(--vurgu); font-size: 1rem; line-height: 1.4; }
+  .rehber-baslik {
+    display: flex; align-items: center; gap: 6px; margin: 0 0 4px;
+    font-size: .75rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--vurgu);
+  }
+  .rehber-baslik svg { width: 16px; height: 16px; flex: none; }
+  .adim { margin: 0; font-weight: 700; color: var(--metin); font-size: 1.15rem; line-height: 1.45; }
   /* İpucu ("Sen: …", "Dinliyorum…") sahnenin dışında, altta kalır */
   .ipucu { margin: 0; color: var(--soluk); font-size: .95rem; text-align: center; min-height: 1.4em; }
   .altyazi {
@@ -554,6 +559,18 @@
   /* =========================================================
      4. ETKİLEŞİM: reyona dokununca vurgulanır
      ========================================================= */
+  /* Reyon ürünleri: her reyon kendi başlık renginin üç tonunu kullanır (daha az renkli, daha uyumlu).
+     Buzdolabı ürünleri etkilenmez. Eski renkli hâle dönmek için bu bloğu silmek yeterli. */
+  .reyon[data-reyon="1"] { --rc: var(--r1); }  .reyon[data-reyon="2"] { --rc: var(--r2); }
+  .reyon[data-reyon="3"] { --rc: var(--r3); }  .reyon[data-reyon="4"] { --rc: var(--r4); }
+  .reyon[data-reyon="5"] { --rc: var(--r5); }
+  .reyon {
+    --u1: var(--rc);
+    --u2: color-mix(in srgb, var(--rc) 62%, #fff);
+    --u3: color-mix(in srgb, var(--rc) 78%, #000);
+    --u4: var(--rc);
+    --u5: color-mix(in srgb, var(--rc) 62%, #fff);
+  }
   .reyon { cursor: default; outline: none; }
   .vurgu-cerceve { fill: none; stroke: var(--vurgu-sahne); stroke-width: 4; opacity: 0; transition: opacity .25s; }
   .reyon:focus-visible .vurgu-cerceve,
@@ -2205,7 +2222,7 @@
           <ellipse class="ten-golge" cx="90"  cy="66" rx="5" ry="8"/>
           <ellipse class="ten-golge" cx="150" cy="66" rx="5" ry="8"/>
           <path class="yuz" d="M90 55 Q90 100 120 102 Q150 100 150 55 Q150 22 120 22 Q90 22 90 55 Z"/>
-          <path class="sac" d="M88 60 Q82 18 120 13 Q158 14 153 58 Q151 42 142 34 Q128 42 104 37 Q94 42 92 60 Z"/>
+          <path class="sac" d="M88 60 Q82 18 120 13 Q158 14 152 60 L148 60 Q146 42 138 35 Q124 42 104 37 Q94 42 92 60 Z"/>
           <path class="tel s3" d="M98 24 Q110 17 126 20"/>
           <path class="tel s3" d="M132 22 Q145 27 149 42"/>
           <path class="kas sol" d="M100 51 Q106 47 113 50"/>
@@ -2447,6 +2464,7 @@
     </svg>
     <!-- Rehber: o anki adımın kısa açıklaması. Hiçbir zaman "yanlış" demez. -->
     <div class="rehber">
+      <p class="rehber-baslik"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 11v6M12 7.5v.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Rehber</p>
       <p class="adim" id="adim" aria-live="polite"></p>
     </div>
     <div class="altyazi" id="altyazi" aria-live="polite"></div>
