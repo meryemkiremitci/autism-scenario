@@ -26,8 +26,9 @@ const el = {
   panel: $("panel"), duzeltme: $("duzeltme"), duzeltmeMetni: $("duzeltmeMetni"),
   duzeltmeEvet: $("duzeltmeEvet"), duzeltmeHayir: $("duzeltmeHayir"),
   oneriler: $("oneriler"), onarimlar: $("onarimlar"),
-  mikrofon: $("mikrofon"), girdi: $("girdi"), gonder: $("gonder"),
-  gorevliMod: $("gorevliMod"), stokMod: $("stokMod"), boyutMod: $("boyutMod"), dilMod: $("dilMod"), beklemeMod: $("beklemeMod"),
+  mikrofon: $("mikrofon"), girdi: $("girdi"), gonder: $("gonder"), giris: $("girisSatiri"),
+  llmUyari: $("llmUyari"), secimUyari: $("secimUyari"), gorevUyari: $("gorevUyari"),
+  gorevliMod: $("gorevliMod"), cinsiyetMod: $("cinsiyetMod"), stokMod: $("stokMod"), boyutMod: $("boyutMod"), dilMod: $("dilMod"), beklemeMod: $("beklemeMod"),
   kalabalikAc: $("kalabalikAc"), sesAc: $("sesAc"), arkaPlanAc: $("arkaPlanAc"), ayakAc: $("ayakAc"),
 };
 
@@ -64,6 +65,8 @@ const oyun = {
   sohbetSuruyor: false, // görevli başka müşteriyle konuşuyor mu (arka plan sesi için)
   sessizlikZaman: null,
   hareketFn: null,
+  girdi: null,          // oyun sürerken kilitli girdi biçimi (hazir | karma | serbest); seçici değişse de sabit kalır
+  llm: { hazir: null, baslangic: null, zaman: null },   // hazir: null = bilinmiyor, true/false
 };
 
 const ayakSesi = ses.ayakSesiOlustur(() => el.ayakAc.checked);
@@ -80,6 +83,7 @@ function sunucuAyarlari() {
   return {
     zorluk: seciliZorluk(),
     gorevli: bosIse(el.gorevliMod.value),
+    gorevli_cinsiyet: bosIse(el.cinsiyetMod.value),
     stok: bosIse(el.stokMod.value),
     boyut_acik: el.boyutMod.value === "" ? null : el.boyutMod.value === "acik",
     dil_duzeyi: bosIse(el.dilMod.value),
@@ -102,6 +106,71 @@ function ortamGuncelle() {
   if (!oyun.cevap) return;   // ses ancak oyun başladıktan sonra
   el.sesAc.checked ? ses.ortam.market.baslat() : ses.ortam.market.durdur();
   el.arkaPlanAc.checked && oyun.sohbetSuruyor ? ses.ortam.arkaPlan.baslat() : ses.ortam.arkaPlan.durdur();
+}
+
+// ---------------------------------------------------------------------
+// Girdi biçimi (zorluğa bağlı) ve LLM bağlantısı
+// ---------------------------------------------------------------------
+
+// Girdi biçimi: hazir = yalnızca hazır cümleler, karma = ikisi de, serbest = yalnızca yazı ve ses.
+// Zorluktan bağımsız; oyuna girerken başlangıç penceresinde seçilir.
+const seciliGirdi = () => document.querySelector('input[name="girdi"]:checked').value;
+
+/** Şu an geçerli girdi biçimi. "Karma"da LLM yoksa yalnızca hazır cümleler kalır. */
+function etkinGirdi() {
+  const m = oyun.girdi || seciliGirdi();
+  return m === "karma" && oyun.llm.hazir === false ? "hazir" : m;
+}
+
+function girdiArayuzu() {
+  const m = etkinGirdi();
+  el.oneriler.hidden = m === "serbest";
+  el.giris.hidden = m === "hazir";
+}
+
+function llmUyarisi() {
+  const oyunda = !!oyun.girdi;
+  const m = oyun.girdi || seciliGirdi();
+  const kesildi = oyunda && oyun.llm.baslangic === true;
+  let yazi = "";
+  if (oyun.llm.hazir === false && m === "karma") {
+    yazi = kesildi
+      ? "Yapay zekâ bağlantısı kesildi. Hazır cümlelerle devam edebilirsin."
+      : "Yapay zekâ bağlantısı yok. Bu oyunda yalnızca hazır cümleler kullanılacak.";
+  } else if (oyun.llm.hazir === false && m === "serbest") {
+    yazi = kesildi
+      ? "Yapay zekâ bağlantısı kesildi. Yazdıkların basit kurallarla anlaşılıyor, bazıları anlaşılmayabilir."
+      : "“Yalnızca yazı ve ses” için yapay zekâ bağlantısı gerekiyor ve şu an yok. Hazır cümleleri de içeren bir seçenek seçebilirsin.";
+  }
+  // Oyun sırasında üstteki uyarı, oyuna girmeden önce başlangıç penceresindeki uyarılar görünür
+  const yerler = oyunda ? [el.llmUyari] : [el.secimUyari, el.gorevUyari];
+  for (const u of [el.llmUyari, el.secimUyari, el.gorevUyari]) {
+    const goster = yerler.includes(u) && !!yazi;
+    u.textContent = goster ? yazi : "";
+    u.hidden = !goster;
+  }
+}
+
+/** Sunucuya LLM bağlantısını sorar (ses servisleri bilgisi de aynı cevaptan gelir). */
+async function llmKontrol() {
+  try {
+    const y = await api.yetenekler();
+    ses.yetenekleriAyarla(y);
+    // Eski sürüm bir sunucu llm_hazir göndermez; o zaman yalnızca LLM ayarlı mı diye bakılır
+    oyun.llm.hazir = y.llm_hazir ?? y.llm !== "sahte";
+  } catch {
+    oyun.llm.hazir = false;
+  }
+  llmUyarisi();
+  girdiArayuzu();
+  llmIzle();
+  return oyun.llm.hazir;
+}
+
+/** Bağlantı yokken arada bir yeniden dener; gelince hazır cümle kısıtı kalkar. */
+function llmIzle() {
+  clearInterval(oyun.llm.zaman);
+  oyun.llm.zaman = oyun.llm.hazir === false ? setInterval(llmKontrol, 20000) : null;
 }
 
 function altyaziGuncelle() {
@@ -155,14 +224,26 @@ function secimeDon() {
 // 3. MAĞAZAYA GİRİŞ VE YAKLAŞMA
 // =====================================================================
 
+/** Görevlinin cinsiyeti: çizim ve ses aynı değerden gelir. Sunucu göndermezse (eski sürüm) erkek. */
+const gorevliCinsiyeti = () => oyun.durum?.varyasyon?.gorevli_cinsiyet || "erkek";
+
 async function magazayaGir() {
   ses.sesiAc();                       // tarayıcılar sesi ancak bir tıklamadan sonra açar
+
+  // "Yalnızca yazı ve ses" yapay zekâ olmadan olmaz: başlamadan bağlantı denenir, yoksa oyun başlamaz
+  const hazir = await llmKontrol();
+  if (!hazir && seciliGirdi() === "serbest") return;
+
   el.secimEkrani.classList.remove("acik");
   await sahneyiSifirla();
+  oyun.girdi = seciliGirdi();
+  oyun.llm.baslangic = oyun.llm.hazir;
+  llmUyarisi();
+  girdiArayuzu();
 
   // Görevlinin başlangıç hâli sunucunun seçtiği varyasyondan gelir
   const mod = oyun.durum.varyasyon.gorevli;
-  sahne.gorevliHazirla(mod);
+  sahne.gorevliHazirla(mod, gorevliCinsiyeti());
   oyun.sohbetSuruyor = mod === "sohbet";
   ortamGuncelle();
 
@@ -196,6 +277,7 @@ async function sahneyiSifirla() {
 }
 
 function oyunuTemizle() {
+  oyun.girdi = null;
   sessizlikIptal();
   hareketGizle();
   el.panel.classList.remove("acik");
@@ -266,6 +348,14 @@ async function cevabiUygula(c, girdiTuru = null) {
   oyun.cevap = c;
   oyun.durum = c.durum;
 
+  // Oyun sırasında yapay zekâ bağlantısı koptuysa uyarı çıkar, orta modda hazır cümlelere dönülür
+  if (c.llm_kesik && oyun.llm.hazir !== false) {
+    oyun.llm.hazir = false;
+    llmUyarisi();
+    girdiArayuzu();
+    llmIzle();
+  }
+
   // --- Görsel olaylar ---
   if (c.olaylar.includes("gorevli_doner")) await sahne.gorevliDonsun();
   if (c.olaylar.includes("gorevli_bakar")) sahne.kullaniciyaBak();
@@ -304,6 +394,7 @@ async function gorevliSoylesin(adim) {
   sahne.durum("konusuyor", adim.jest);
   await ses.seslendir(adim.metin, {
     hiz: adim.hiz,
+    cinsiyet: gorevliCinsiyeti(),
     agizFn: (harfSuresi) => sahne.agziOynat(adim.metin, harfSuresi, el.altyazi),
   });
   await bekle(500);                    // jest konuşma bitince hemen kaybolmasın
@@ -358,6 +449,7 @@ function arayuzuGuncelle(c) {
     }
   }
 
+  girdiArayuzu();
   el.panel.classList.toggle("acik", !["bitti"].includes(c.durum.dugum));
 }
 
@@ -492,6 +584,8 @@ el.duzeltmeHayir.addEventListener("click", () => {
 
 document.querySelectorAll('input[name="zorluk"]').forEach((r) =>
   r.addEventListener("change", () => istemciZorlukUygula(r.value)));
+document.querySelectorAll('input[name="girdi"]').forEach((r) =>
+  r.addEventListener("change", () => { if (!oyun.girdi) llmKontrol(); }));   // seçim ekranında bağlantıyı yeniden dene
 [el.kalabalikAc, el.sesAc, el.arkaPlanAc].forEach((k) => k.addEventListener("change", ortamGuncelle));
 el.altyaziAc.addEventListener("change", altyaziGuncelle);
 document.querySelectorAll('input[name="seviye"]').forEach((r) =>
@@ -506,7 +600,7 @@ async function baslat() {
   istemciZorlukUygula(seciliZorluk());
 
   // Sunucuda hangi servisler var? Yoksa tarayıcının kendi özellikleri kullanılır.
-  try { ses.yetenekleriAyarla(await api.yetenekler()); } catch { /* sunucu yoksa aşağıda görünür */ }
+  await llmKontrol();   // ses servisleri ve yapay zekâ bağlantısı (sunucu yoksa aşağıda görünür)
   if (!ses.sesCikabilir()) el.altyaziAc.checked = true;   // ses çıkamıyorsa altyazı kendiliğinden açılır
   altyaziGuncelle();
   el.mikrofon.hidden = !ses.dinlemeMumkun();

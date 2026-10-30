@@ -18,6 +18,7 @@ from __future__ import annotations
 from . import motor, veri
 from .dil.anlama import anla
 from .dil.cevap import cumle_kur
+from .dil.saglayici import saglayici_olustur, son_cagri_basarili
 from .modeller import (
     Bitis,
     HazirCumle,
@@ -92,7 +93,11 @@ async def konus(istek: KonusIstegi) -> KonusCevabi:
         if adim.kim == "gorevli":
             sonuc.durum.gorevli_konustu = True
 
-    return _paketle(sonuc, adimlar)
+    cevap = _paketle(sonuc, adimlar)
+    if girdi.tur in ("yazi", "ses"):
+        # Gerçek bir LLM ayarlıysa ve son çağrısı başarısızsa arayüz uyarı gösterir / hazır cümlelere döner
+        cevap.llm_kesik = saglayici_olustur().ad != "sahte" and son_cagri_basarili() is False
+    return cevap
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +146,12 @@ def _paketle(sonuc: motor.MotorSonucu, adimlar: list) -> KonusCevabi:
     if d.bitti:
         ozet = ["Markete girdin", "Görevliye yaklaştın", *d.kayit]
         if not d.urunlu:
-            ozet.append("Ürünü almadan ayrıldın. Bu da gerçek hayatta sık olan, geçerli bir sonuç.")
+            if d.urun_soruldu:
+                ozet.append("Ürünü almadan ayrıldın. Bu da gerçek hayatta sık olan, geçerli bir sonuç.")
+            elif d.baska_sorulan:
+                ozet.append(f"Aradığın ürün yerine başka bir ürünü ({', '.join(d.baska_sorulan)}) sordun ve ayrıldın.")
+            else:
+                ozet.append("Aradığın ürünü sormadan ayrıldın.")
         bitis = Bitis(urunlu=bool(d.urunlu), ozet=ozet)
 
     return KonusCevabi(

@@ -77,7 +77,12 @@ export async function yuru(hedef, sure, ayakSesi) {
 // 2. GÖREVLİNİN BAŞLANGIÇ DURUMU
 // Sunucunun seçtiği varyasyona göre: boşta, raf düzenliyor, başka müşteriyle konuşuyor.
 // =====================================================================
-export function gorevliHazirla(mod) {
+export function gorevliHazirla(mod, cinsiyet = "erkek") {
+  // Aynı çizimde kadın/erkek parçaları var (saç, kirpik, küpe); sınıf hangisinin görüneceğini seçer
+  for (const svg of [gorevli, gorevliAr]) {
+    svg.classList.toggle("kadin", cinsiyet === "kadin");
+    svg.classList.toggle("erkek", cinsiyet !== "kadin");
+  }
   sohbetDurdur();
   sahneSvg.classList.toggle("mod-konusma", mod === "sohbet");   // diğer müşteri görünür
   sohbetKp.classList.remove("gitti");

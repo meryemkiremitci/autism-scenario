@@ -35,12 +35,12 @@ export const konus = (durum, girdi) => istek("/api/konus", { durum, girdi });
  * Görevlinin cümlesini sunucudaki TTS servisiyle sese çevirmeyi dener.
  * Servis yoksa (501) null döner; o zaman tarayıcının kendi sesi kullanılır.
  */
-export async function ttsIste(metin, hiz = 1) {
+export async function ttsIste(metin, hiz = 1, cinsiyet = "kadin") {
   try {
     const yanit = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ metin, hiz }),
+      body: JSON.stringify({ metin, hiz, cinsiyet }),
     });
     return yanit.ok ? await yanit.blob() : null;
   } catch {
@@ -52,7 +52,7 @@ export async function ttsIste(metin, hiz = 1) {
 export async function sttGonder(kayit) {
   try {
     const form = new FormData();
-    form.append("ses", kayit, "ses.webm");
+    form.append("ses", kayit, kayit.type === "audio/wav" ? "ses.wav" : "ses.webm");
     const yanit = await fetch("/api/stt", { method: "POST", body: form });
     return yanit.ok ? (await yanit.json()).metin : null;
   } catch {

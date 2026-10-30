@@ -24,6 +24,9 @@ from pydantic import BaseModel, Field
 # Görevlinin oyun başındaki durumu
 GorevliDurumu = Literal["bos", "raf", "sohbet"]
 
+# Görevlinin cinsiyeti (çizim ve ses buna göre seçilir)
+Cinsiyet = Literal["kadin", "erkek"]
+
 # Ürünün stok durumu
 StokDurumu = Literal["var", "boyut", "yok"]
 
@@ -61,6 +64,7 @@ class Ayarlar(BaseModel):
     zorluk: Literal["kolay", "orta", "zor"] = "orta"
     # None = zorluk paketinden rastgele seç. Bir değer verilirse o sabitlenir.
     gorevli: Optional[GorevliDurumu] = None
+    gorevli_cinsiyet: Optional[Cinsiyet] = None
     stok: Optional[StokDurumu] = None
     hafiza: Optional[Hafiza] = None
     boyut_acik: Optional[bool] = None
@@ -73,6 +77,7 @@ class Varyasyon(BaseModel):
     """Oturum başında KODUN seçtiği koşullar. Oyun boyunca değişmez."""
 
     gorevli: GorevliDurumu
+    gorevli_cinsiyet: Cinsiyet = "erkek"   # eski taşınan durumlarda yoksa eskisi gibi erkek
     stok: StokDurumu
     hafiza: Hafiza
     boyut_acik: bool
@@ -118,6 +123,8 @@ class OturumDurumu(BaseModel):
     seslendi: bool = False               # sohbet sırasında kullanıcı seslendi mi
     gorevli_konustu: bool = False        # onarım kartları ancak bundan sonra görünür
     yonlendirilen: Optional[str] = None  # görevlinin yerini tarif ettiği eşya
+    urun_soruldu: bool = False           # kullanıcı görev ürününü hiç sordu mu (bitiş özeti için)
+    baska_sorulan: list[str] = []        # görev dışı sorduğu ürünler (bitiş özeti için)
 
     gecmis: list[Tur] = []
     kayit: list[str] = []                # bitiş ekranındaki "yaptıkların" listesi
@@ -185,6 +192,7 @@ class KonusCevabi(BaseModel):
     sessizlik_saniye: Optional[int] = None  # bu adımda kaç saniye sessizlikten sonra 'sessiz' gönderilsin
     bitis: Optional[Bitis] = None
     gorev: Optional[str] = None             # sadece oturum başında: görev kartının metni
+    llm_kesik: bool = False                 # yazı/ses turunda LLM'e ulaşılamadıysa (kural yedeği kullanıldı)
 
 
 # ---------------------------------------------------------------------------

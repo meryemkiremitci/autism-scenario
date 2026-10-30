@@ -86,6 +86,8 @@ def kural_tabanli_anla(metin: str, durum: OturumDurumu) -> AnlamaSonucu:
         niyetler.append("alternatif_sor")
     elif dugum == "gelis" and _iceriyor(m, ANAHTARLAR["gelis_sor"]):
         niyetler.append("gelis_sor")
+    elif dugum == "urun" and not baska_urun and (_iceriyor(m, ANAHTARLAR["tesekkur"]) or _iceriyor(m, ["iyi günler", "hoşça kal", "gerek yok"])):
+        niyetler.append("ayril")   # "tamam" tek başına çıkış sayılmaz: yanlışlıkla bitmesin
     elif dugum == "tesekkur" and _iceriyor(m, ANAHTARLAR["tesekkur"]):
         niyetler.append("tesekkur")
     elif dugum in ("boyut", "gelis") and (_iceriyor(m, ANAHTARLAR["tesekkur"]) or _iceriyor(m, ANAHTARLAR["ayril"])):
