@@ -66,7 +66,8 @@ class SunucuAyarlari:
     # Azure Speech (TTS_SAGLAYICI=azure). Bölge örn. "westeurope"; ses adı Türkçe bir Neural ses olmalı.
     azure_speech_key: str = os.getenv("AZURE_SPEECH_KEY", "")
     azure_speech_region: str = os.getenv("AZURE_SPEECH_REGION", "")
-    azure_speech_ses: str = os.getenv("AZURE_SPEECH_SES", "tr-TR-EmelNeural")
+    azure_speech_ses_kadin: str = os.getenv("AZURE_SPEECH_SES_KADIN", "tr-TR-EmelNeural")   # kadın görevli
+    azure_speech_ses_erkek: str = os.getenv("AZURE_SPEECH_SES_ERKEK", "tr-TR-AhmetNeural")  # erkek görevli
 
 
 AYARLAR = SunucuAyarlari()

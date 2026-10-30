@@ -34,12 +34,12 @@ export const sesCikabilir = () => yetenek.tts || tarayiciSesiVar;
  *   agizFn(harfSuresi) : ağzı oynatan fonksiyon; bir Promise döndürür (sahne.agziOynat)
  *   kim                : "gorevli" ya da "diger" (diğer müşteri daha ince bir sesle konuşur)
  */
-export async function seslendir(metin, { hiz = 1, kim = "gorevli", agizFn = null } = {}) {
+export async function seslendir(metin, { hiz = 1, kim = "gorevli", agizFn = null, cinsiyet = "kadin" } = {}) {
   ortam.kis(true);                    // görevli konuşurken ortam sesi kısılır
   try {
     // a) Sunucudaki TTS: ses dosyasının süresi belli olduğu için ağız tam eşleşir
     if (yetenek.tts && kim === "gorevli") {
-      const kayit = await ttsIste(metin, hiz);
+      const kayit = await ttsIste(metin, hiz, cinsiyet);
       if (kayit) {
         const ses = new Audio(URL.createObjectURL(kayit));
         await new Promise((r) => { ses.onloadedmetadata = r; ses.onerror = r; });
@@ -114,6 +114,34 @@ export async function dinlemeBaslat() {
   }
 }
 
+/**
+ * MediaRecorder kaydını (Chrome'da webm/opus) 16 kHz, tek kanal, 16 bit WAV'a çevirir.
+ * Sunucudaki konuşma tanıma servisleri en güvenilir bu biçimi okur. Çevrilemezse null döner.
+ */
+async function wavaCevir(blob) {
+  try {
+    const hedef = 16000;
+    const kaynakSes = await baglam().decodeAudioData(await blob.arrayBuffer());
+    const cevrimdisi = new OfflineAudioContext(1, Math.max(1, Math.ceil(kaynakSes.duration * hedef)), hedef);
+    const kaynak = cevrimdisi.createBufferSource();
+    kaynak.buffer = kaynakSes;
+    kaynak.connect(cevrimdisi.destination);
+    kaynak.start();
+    const ornekler = (await cevrimdisi.startRendering()).getChannelData(0);
+
+    const wav = new DataView(new ArrayBuffer(44 + ornekler.length * 2));
+    const yaz = (konum, metin) => [...metin].forEach((c, i) => wav.setUint8(konum + i, c.charCodeAt(0)));
+    yaz(0, "RIFF"); wav.setUint32(4, 36 + ornekler.length * 2, true); yaz(8, "WAVE");
+    yaz(12, "fmt "); wav.setUint32(16, 16, true); wav.setUint16(20, 1, true); wav.setUint16(22, 1, true);
+    wav.setUint32(24, hedef, true); wav.setUint32(28, hedef * 2, true); wav.setUint16(32, 2, true); wav.setUint16(34, 16, true);
+    yaz(36, "data"); wav.setUint32(40, ornekler.length * 2, true);
+    ornekler.forEach((x, i) => wav.setInt16(44 + i * 2, Math.max(-1, Math.min(1, x)) * 0x7fff, true));
+    return new Blob([wav], { type: "audio/wav" });
+  } catch {
+    return null;
+  }
+}
+
 /** Mikrofon butonu bırakılınca çağrılır; yazıya çevrilmiş metni döndürür (yoksa ""). */
 export async function dinlemeBitir() {
   const a = aktif;
@@ -128,7 +156,8 @@ export async function dinlemeBitir() {
   await bitti;
   a.akis.getTracks().forEach((t) => t.stop());      // mikrofonu hemen kapat
   const kayit = new Blob(a.parcalar, { type: a.kaydedici.mimeType || "audio/webm" });
-  return ((await sttGonder(kayit)) || "").trim();   // kayıt gönderildikten sonra tarayıcıda da tutulmaz
+  const wav = await wavaCevir(kayit);
+  return ((await sttGonder(wav || kayit)) || "").trim();   // kayıt gönderildikten sonra tarayıcıda da tutulmaz
 }
 
 // =====================================================================

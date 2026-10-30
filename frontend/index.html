@@ -64,6 +64,26 @@
     padding: 8px 14px; border-radius: 999px; border: 1px solid var(--vurgu);
     background: var(--yuzey); color: var(--metin); font: inherit; font-size: .95rem; cursor: pointer;
   }
+  .giris[hidden], .cipler[hidden] { display: none; }
+  /* Görevli cinsiyeti: aynı çizimde kadın/erkek parçaları (saç, kirpik, küpe) sınıfa göre gösterilir */
+  #gorevli:not(.kadin) .m-kadin, #gorevliArka:not(.kadin) .m-kadin,
+  #gorevli.kadin .m-erkek, #gorevliArka.kadin .m-erkek { display: none; }
+  /* LLM bağlantı uyarısı: dikkat çeker ama korkutmaz */
+  .llm-uyari {
+    margin: 0; padding: 8px 14px; border-radius: 10px; max-width: min(640px, 100%);
+    background: var(--yuzey); border: 2px solid var(--kazak); color: var(--metin);
+    font-size: .95rem; line-height: 1.4; text-align: center;
+  }
+  .llm-uyari[hidden] { display: none; }
+  .girdi-secim { margin: 0; padding: 0; border: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .girdi-secim legend { padding: 0; margin: 0 0 6px; font-weight: 700; font-size: .95rem; }
+  .girdi-secim label {
+    padding: 8px 14px; border-radius: 999px; border: 1px solid var(--vurgu); background: var(--yuzey);
+    font-size: .92rem; cursor: pointer;
+  }
+  .girdi-secim label:has(input:checked) { background: var(--vurgu); color: var(--yuzey); font-weight: 700; }
+  .girdi-secim input { position: absolute; opacity: 0; pointer-events: none; }
+  .girdi-secim label:has(input:focus-visible) { outline: 3px solid var(--vurgu); outline-offset: 2px; }
   .cip.onarim { border-style: dashed; border-color: var(--soluk); font-size: .85rem; padding: 6px 12px; }
   .giris { display: flex; gap: 8px; }
   .giris input {
@@ -607,6 +627,7 @@
     <span aria-hidden="true">·</span>
     <label><input type="checkbox" id="altyaziAc"> Altyazı</label>
   </div>
+  <p class="llm-uyari" id="llmUyari" role="alert" hidden></p>
 
   <!-- Ayrıntılı ayarlar: boş bırakılanlar zorluk paketinden gelir -->
   <details class="ayarlar">
@@ -618,6 +639,13 @@
           <option value="bos">Boşta, bize dönük</option>
           <option value="raf">Raf düzenliyor</option>
           <option value="sohbet">Başka müşteriyle konuşuyor</option>
+        </select>
+      </label>
+      <label>Görevlinin cinsiyeti
+        <select id="cinsiyetMod">
+          <option value="">Rastgele</option>
+          <option value="kadin">Kadın</option>
+          <option value="erkek">Erkek</option>
         </select>
       </label>
       <label>Stok
@@ -2130,9 +2158,12 @@
       <g class="kafa-salinim"><g class="kafa">
         <ellipse class="ten-golge" cx="90"  cy="64" rx="5" ry="8"/>
         <ellipse class="ten-golge" cx="150" cy="64" rx="5" ry="8"/>
-        <path class="sac" d="M90 58 Q88 18 120 15 Q152 18 150 58 Q150 92 120 97 Q90 92 90 58 Z"/>
-        <path class="tel-m s3" d="M104 26 Q112 50 108 80"/>
-        <path class="tel-m s3" d="M134 26 Q128 50 132 80"/>
+        <path class="sac m-erkek" d="M90 58 Q88 18 120 15 Q152 18 150 58 Q150 92 120 97 Q90 92 90 58 Z"/>
+        <path class="tel-m s3 m-erkek" d="M104 26 Q112 50 108 80"/>
+        <path class="tel-m s3 m-erkek" d="M134 26 Q128 50 132 80"/>
+        <path class="sac-k m-kadin" d="M88 58 Q86 14 120 12 Q154 14 152 58 L157 124 Q120 134 83 124 Z"/>
+        <path class="tel-k s3 m-kadin" d="M104 26 Q112 70 106 118"/>
+        <path class="tel-k s3 m-kadin" d="M136 26 Q128 70 134 118"/>
       </g></g>
     </g>
   </svg>
@@ -2219,16 +2250,24 @@
 
       <g class="kafa-salinim">
         <g class="kafa">
+          <path class="sac-k m-kadin" d="M84 62 Q78 12 120 10 Q162 12 156 62 L160 114 Q148 122 137 108 L136 90 L104 90 L103 108 Q92 122 80 114 Z"/>
           <ellipse class="ten-golge" cx="90"  cy="66" rx="5" ry="8"/>
           <ellipse class="ten-golge" cx="150" cy="66" rx="5" ry="8"/>
           <path class="yuz" d="M90 55 Q90 100 120 102 Q150 100 150 55 Q150 22 120 22 Q90 22 90 55 Z"/>
-          <path class="sac" d="M88 60 Q82 18 120 13 Q158 14 152 60 L148 60 Q146 42 138 35 Q124 42 104 37 Q94 42 92 60 Z"/>
-          <path class="tel s3" d="M98 24 Q110 17 126 20"/>
-          <path class="tel s3" d="M132 22 Q145 27 149 42"/>
+          <path class="sac m-erkek" d="M88 60 Q82 18 120 13 Q158 14 152 60 L148 60 Q146 42 138 35 Q124 42 104 37 Q94 42 92 60 Z"/>
+          <path class="tel s3 m-erkek" d="M98 24 Q110 17 126 20"/>
+          <path class="tel s3 m-erkek" d="M132 22 Q145 27 149 42"/>
+          <path class="sac-k m-kadin" d="M89 62 Q84 18 120 15 Q156 17 152 54 Q146 36 131 31 Q119 43 101 42 Q93 48 89 62 Z"/>
+          <path class="tel-k s3 m-kadin" d="M96 30 Q108 20 124 19"/>
+          <path class="tel-k s3 m-kadin" d="M156 70 Q157 90 158 108"/>
+          <path class="tel-k s3 m-kadin" d="M84 70 Q83 90 82 108"/>
+          <circle class="kupe s2p m-kadin" cx="90" cy="74.5" r="1.7"/>
+          <circle class="kupe s2p m-kadin" cx="150" cy="74.5" r="1.7"/>
           <path class="kas sol" d="M100 51 Q106 47 113 50"/>
           <path class="kas sag" d="M127 50 Q134 47 140 51"/>
           
           <g class="goz sol">
+            <path class="kirpik m-kadin" d="M100 58.5 L98.2 56.8"/>
             <g class="bakis s1"><circle class="bebek" cx="106" cy="60" r="2.8"/></g>
             
             <g class="s2p">
@@ -2244,6 +2283,7 @@
           </g>
           
           <g class="goz sag">
+            <path class="kirpik m-kadin" d="M140 58.5 L141.8 56.8"/>
             <g class="bakis s1"><circle class="bebek" cx="134" cy="60" r="2.8"/></g>
             
             <g class="s2p">
@@ -2473,11 +2513,19 @@
     <div class="kaplama acik" id="secimEkrani">
       <div class="kutu-panel" id="secimPanel">
         <h2>Bugün marketten ne almak istiyorsun?</h2>
+        <fieldset class="girdi-secim">
+          <legend>Nasıl konuşmak istersin?</legend>
+          <label><input type="radio" name="girdi" value="hazir"> Hazır cümleler</label>
+          <label><input type="radio" name="girdi" value="karma" checked> Hazır cümleler + yazı ve ses</label>
+          <label><input type="radio" name="girdi" value="serbest"> Yalnızca yazı ve ses</label>
+        </fieldset>
+        <p class="llm-uyari" id="secimUyari" role="alert" hidden></p>
         <div class="urun-kartlari" id="urunKartlari"></div>
       </div>
       <div class="kutu-panel" id="gorevPanel" hidden>
         <h2>Görevin</h2>
         <p id="gorevMetni"></p>
+        <p class="llm-uyari" id="gorevUyari" role="alert" hidden></p>
         <div class="ust-satir">
           <button class="ana-buton" id="girBtn">Markete gir</button>
           <button class="cip" id="degistirBtn">Başka ürün seç</button>
@@ -2514,7 +2562,7 @@
     </div>
     <div class="cipler" id="oneriler"></div>
     <div class="cipler" id="onarimlar"></div>
-    <div class="giris">
+    <div class="giris" id="girisSatiri">
       <button class="mikrofon" id="mikrofon" aria-label="Basılı tutup konuş" title="Basılı tutup konuş">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>

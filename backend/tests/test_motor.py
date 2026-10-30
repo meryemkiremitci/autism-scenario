@@ -163,3 +163,53 @@ def test_gecersiz_niyet_anlasilmadi():
 
 def test_onarim_gorevli_konusmadan_yok_sayilir():
     assert adlar(motor.onarim(yeni(), "tekrar")) == []
+
+
+# --- Ürün adımında veda ---------------------------------------------------------
+
+def test_baska_urun_sorup_tesekkur_edince_biter():
+    # Şemsiye görevi: "ekmek nerede" -> yer söylenir, adım değişmez; "tamam teşekkürler" -> veda
+    d = motor.isle(yeni(), ["selam"]).durum
+    s = motor.isle(d, ["baska_urun"], varliklar={"urun": "ekmek"})
+    assert adlar(s) == ["baska_urun_yeri"] and s.durum.dugum == "urun"
+    s = motor.isle(s.durum, ["ayril"])
+    assert adlar(s) == ["vedalas_urunsuz"] and s.durum.bitti and s.durum.urunlu is False
+
+
+def test_baska_urun_sorup_ayrilinca_ozet_baska_urun_der():
+    from app import akis
+    d = motor.isle(yeni(), ["selam"]).durum
+    d = motor.isle(d, ["baska_urun"], varliklar={"urun": "ekmek"}).durum
+    s = motor.isle(d, ["ayril"])
+    assert s.durum.urun_soruldu is False and s.durum.baska_sorulan == ["ekmek"]
+    ozet = akis._paketle(s, []).bitis.ozet
+    assert any("başka bir ürünü (ekmek) sordun" in satir for satir in ozet)
+    assert not any("Ürünü almadan ayrıldın" in satir for satir in ozet)
+
+
+def test_baska_urun_sonra_kendi_urunu_basarili_sayilir():
+    # Önce ekmek, sonra görev ürününü (süt) sorar, teşekkür eder: normal başarı
+    d = motor.isle(yeni(), ["selam"]).durum
+    d = motor.isle(d, ["baska_urun"], varliklar={"urun": "ekmek"}).durum
+    d = motor.isle(d, ["urun_sor"]).durum
+    assert d.dugum == "tesekkur" and d.urun_soruldu
+    s = motor.isle(d, ["tesekkur"])
+    assert s.durum.bitti and s.durum.urunlu is True
+
+
+def test_hic_sormadan_ayrilinca_ozet_bunu_soyler():
+    from app import akis
+    d = motor.isle(yeni(), ["selam"]).durum
+    s = motor.isle(d, ["ayril"])
+    ozet = akis._paketle(s, []).bitis.ozet
+    assert "Aradığın ürünü sormadan ayrıldın." in ozet
+
+
+# --- Görevlinin cinsiyeti ---------------------------------------------------------
+
+def test_gorevli_cinsiyeti_secilebilir_ve_rastgele_iki_degeri_de_alir():
+    import random
+    for c in ("kadin", "erkek"):
+        assert motor.baslangic("sut", Ayarlar(gorevli_cinsiyet=c)).varyasyon.gorevli_cinsiyet == c
+    gorulen = {motor.baslangic("sut", Ayarlar(), random.Random(i)).varyasyon.gorevli_cinsiyet for i in range(20)}
+    assert gorulen == {"kadin", "erkek"}

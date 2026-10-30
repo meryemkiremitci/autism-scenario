@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -28,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import akis, veri
-from .dil.saglayici import saglayici_olustur
+from .dil.saglayici import baglanti_var_mi, saglayici_olustur
 from .modeller import KonusCevabi, KonusIstegi, OturumIstegi
 from .ses import stt, tts
 
@@ -63,11 +64,13 @@ async def senaryo() -> dict:
 async def yetenekler() -> dict:
     """
     Tarayıcı hangi servislerin sunucuda hazır olduğunu buradan öğrenir.
+    llm_hazir: LLM'e küçük bir deneme çağrısı yapılır (15 sn önbellekli); zorluk modları buna bakar.
     Ses servisleri yoksa tarayıcının kendi özelliklerine düşülür.
     """
     from .ayarlar import AYARLAR
     return {
         "llm": saglayici_olustur().ad,
+        "llm_hazir": await baglanti_var_mi(),   # gerçekten cevap veriyor mu (anahtar/ağ dahil)
         "stt": AYARLAR.stt_saglayici != "yok",
         "tts": AYARLAR.tts_saglayici != "yok",
     }
@@ -106,11 +109,12 @@ async def sesi_yaziya(ses: UploadFile = File(...)) -> dict:
 class TTSIstegi(BaseModel):
     metin: str = Field(min_length=1, max_length=300)
     hiz: float = Field(default=1.0, ge=0.5, le=1.5)
+    cinsiyet: Literal["kadin", "erkek"] = "kadin"
 
 
 @app.post("/api/tts")
 async def yaziyi_sese(istek: TTSIstegi) -> Response:
-    sonuc = await tts.sese_cevir(istek.metin, istek.hiz)
+    sonuc = await tts.sese_cevir(istek.metin, istek.hiz, istek.cinsiyet)
     if sonuc is None:
         raise HTTPException(status_code=501, detail="TTS servisi yapılandırılmadı.")
     ses, mime = sonuc
@@ -121,6 +125,19 @@ async def yaziyi_sese(istek: TTSIstegi) -> Response:
 # Arayüz dosyaları (en sonda: /api/... adreslerini gölgelemesin)
 # ---------------------------------------------------------------------------
 
+class DogrulamaliStatik(StaticFiles):
+    """
+    Arayüz dosyalarını her seferinde yeniden doğrulatır (Cache-Control: no-cache).
+    Değişmediyse tarayıcı 304 alır, değiştiyse yenisini indirir. Böylece JS modüllerinin
+    (sahne.js gibi) eski kopyası tarayıcıda kalıp çizim ile ses uyumsuz çalışmaz.
+    """
+
+    async def get_response(self, path: str, scope):
+        yanit = await super().get_response(path, scope)
+        yanit.headers["Cache-Control"] = "no-cache"
+        return yanit
+
+
 ARAYUZ = Path(__file__).resolve().parents[2] / "frontend"
 if ARAYUZ.exists():
-    app.mount("/", StaticFiles(directory=ARAYUZ, html=True), name="arayuz")
+    app.mount("/", DogrulamaliStatik(directory=ARAYUZ, html=True), name="arayuz")

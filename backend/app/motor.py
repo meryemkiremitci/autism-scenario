@@ -45,6 +45,7 @@ DUGUM_NIYETLERI: dict[str, dict[str, str]] = {
     "urun": {
         "urun_sor": "Müşteri aradığı ürünü söylüyor, soruyor ya da tarif ediyor",
         "selam": "Müşteri sadece selam veriyor",
+        "ayril": "Müşteri teşekkür edip ya da vedalaşıp (ör. 'tamam teşekkürler', 'iyi günler') başka bir şey sormadan ayrılmak istiyor",
     },
     "boyut": {
         "alternatif_sor": "Müşteri ürünün başka bir boyutunu soruyor",
@@ -154,6 +155,7 @@ def varyasyon_sec(ayarlar: Ayarlar, rng: random.Random | None = None) -> Varyasy
     paket = veri.veri()["zorluklar"][ayarlar.zorluk]
     return Varyasyon(
         gorevli=ayarlar.gorevli or rng.choice(paket["gorevli"]),
+        gorevli_cinsiyet=ayarlar.gorevli_cinsiyet or rng.choice(["kadin", "erkek"]),
         stok=ayarlar.stok or rng.choice(paket["stok"]),
         hafiza=ayarlar.hafiza or rng.choice(paket["hafiza"]),
         boyut_acik=paket["boyut_acik"] if ayarlar.boyut_acik is None else ayarlar.boyut_acik,
@@ -277,6 +279,9 @@ def _tek_niyet(s: MotorSonucu, niyet: str, varliklar: dict[str, str], kalan: lis
         if niyet == "selam":
             s.eylemler.append(_eylem("karsila_kisa"))
             return True
+        if niyet == "ayril":
+            # Başka bir ürünün yerini öğrenip teşekkür etmek de buraya düşer: ürün alınmadan bitiş
+            return _bitir(s, urunlu=False, eylem_adi="vedalas_urunsuz")
 
     if d.dugum == "boyut":
         if niyet == "alternatif_sor":
@@ -349,6 +354,7 @@ def _selam(s: MotorSonucu, varliklar: dict[str, str], kalan: list[str]) -> bool:
 def _urun_sor(s: MotorSonucu) -> bool:
     d = s.durum
     b = bilgiler(d)
+    d.urun_soruldu = True
     d.kayit.append(f"{veri.tr_buyuk_bas(b['istenen'])} sordun")
     stok = etkin_stok(d)
 
@@ -389,6 +395,10 @@ def _baska_urun(s: MotorSonucu, varliklar: dict[str, str]) -> bool:
     if soz and veri.tr_kucuk(gorev_urunu) in veri.tr_kucuk(soz) and d.dugum == "urun":
         return _urun_sor(s)
 
+    if soz and soz not in d.baska_sorulan:
+        d.baska_sorulan.append(soz)
+    d.kayit.append(f"Başka bir ürünü sordun: {soz}" if soz else "Başka bir ürünü sordun")
+
     yer_id = veri.kategori_yeri(soz) if soz else None
     if yer_id:
         s.eylemler.append(_yer_eylemi("baska_urun_yeri", yer_id, esya=soz))
@@ -425,7 +435,10 @@ def _beklemeye_al(s: MotorSonucu) -> None:
 def _bitir(s: MotorSonucu, urunlu: bool, eylem_adi: str) -> bool:
     d = s.durum
     if not urunlu:
-        d.kayit.append("Teşekkür edip ürünü almadan ayrılmaya karar verdin")
+        d.kayit.append(
+            "Teşekkür edip ürünü almadan ayrılmaya karar verdin" if d.urun_soruldu
+            else "Aradığın ürünü sormadan ayrılmaya karar verdin"
+        )
     s.eylemler.append(_eylem(eylem_adi))
     d.bitti, d.urunlu, d.dugum = True, urunlu, "bitti"
     return False
@@ -459,7 +472,7 @@ def sessiz(durum: OturumDurumu) -> MotorSonucu:
             d.kayit.append("Görevlinin işini bitirmesini bekledin")
             _beklemeye_al(s)
     elif d.dugum not in ("bekleme", "bitti"):
-        s.rehber_ek = "Acele etme. Hazır cümlelerden birini seçebilir ya da kendin yazabilirsin."
+        s.rehber_ek = "Acele etme. Hazır olduğunda devam edebilirsin."
     return s
 
 

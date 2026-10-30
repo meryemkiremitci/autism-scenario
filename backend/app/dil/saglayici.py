@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import Any, Optional, Protocol
 
 import httpx
@@ -26,6 +27,12 @@ import httpx
 from ..ayarlar import AYARLAR
 
 log = logging.getLogger(__name__)
+
+# Son gerçek LLM çağrısı bağlantı açısından başarılı mıydı? (None = henüz denenmedi)
+# "Başarılı" = HTTP cevabı geldi; modelin JSON'u bozuk olması bağlantı sorunu sayılmaz.
+_son_basari: Optional[bool] = None
+_son_kontrol: float = 0.0
+KONTROL_ARALIGI = 15.0   # saniye; arayüz sık sorsa da LLM'e bu kadar sürede bir gidilir
 
 
 class LLMSaglayici(Protocol):
@@ -71,11 +78,13 @@ class AnthropicSaglayici:
                 },
             )
             yanit.raise_for_status()
+            _basari_isaretle(True)
             # Cevap metin blokları halinde gelir; hepsini birleştiriyoruz
             metin = "".join(b.get("text", "") for b in yanit.json().get("content", []) if b.get("type") == "text")
             return _json_ayikla(metin)
         except Exception as hata:  # zaman aşımı, ağ, HTTP hatası, bozuk JSON...
             log.warning("LLM çağrısı başarısız (%s): %s", model, hata)
+            _basari_isaretle(False)
             return None
 
 
@@ -110,11 +119,18 @@ class AzureOpenAISaglayici:
                 },
             )
             yanit.raise_for_status()
+            _basari_isaretle(True)
             metin = yanit.json()["choices"][0]["message"].get("content") or ""
             return _json_ayikla(metin)
         except Exception as hata:  # zaman aşımı, ağ, HTTP hatası, bozuk JSON...
             log.warning("LLM çağrısı başarısız (%s): %s", model, hata)
+            _basari_isaretle(False)
             return None
+
+
+def _basari_isaretle(basarili: bool) -> None:
+    global _son_basari
+    _son_basari = basarili
 
 
 def _json_ayikla(metin: str) -> Optional[dict[str, Any]]:
@@ -177,3 +193,25 @@ def saglayici_olustur() -> LLMSaglayici:
                 log.warning("AZURE_OPENAI_API_KEY veya AZURE_OPENAI_ENDPOINT tanımlı değil; sahte sağlayıcıya geçiliyor.")
             _saglayici = SahteSaglayici()
     return _saglayici
+
+
+def son_cagri_basarili() -> Optional[bool]:
+    """Son gerçek LLM çağrısının sonucu. Sahte sağlayıcıda ya da hiç çağrı yapılmadıysa None."""
+    return _son_basari
+
+
+async def baglanti_var_mi() -> bool:
+    """
+    LLM gerçekten cevap veriyor mu? Sahte sağlayıcıda her zaman False.
+    Küçük bir deneme çağrısı yapar; sonuç KONTROL_ARALIGI kadar saklanır.
+    """
+    global _son_kontrol
+    saglayici = saglayici_olustur()
+    if saglayici.ad == "sahte":
+        return False
+    simdi = time.monotonic()
+    if _son_basari is not None and simdi - _son_kontrol < KONTROL_ARALIGI:
+        return _son_basari
+    await saglayici.json_iste('JSON döndür: {"ok": true}', "ping", AYARLAR.anlama_modeli, max_tokens=20)
+    _son_kontrol = time.monotonic()
+    return bool(_son_basari)
